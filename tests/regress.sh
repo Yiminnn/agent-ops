@@ -140,6 +140,13 @@ expect 'no new row' "$(grep -c '^af	' "$TMP/home/state/sessions.tsv")" 1
 has 'current pid is fine' "$("$S" resume af "$P" --after "$AP")" 'queued af'
 for p in $(awk -F'\t' '$1=="af"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
 
+# Round 2, item 7: one quoted literal path per key, the only form bash and Python read alike
+G2=$(mktemp -d "$TMP/cfg2.XXXXXX"); mkdir -p "$G2/state"; cfgtest() {
+  echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G2" "$H/deny_merge_git.py" >/dev/null 2>&1; expect "$1" "$?" "$2"; }
+{ cat "$TMP/home/config"; echo "PRIMARY_CHECKOUT=\"/other\""; } >"$G2/config"; cfgtest 'duplicate key fails' 1
+sed 's|^PRIMARY_CHECKOUT=\(.*\)|PRIMARY_CHECKOUT=\1 # main|' "$TMP/home/config" >"$G2/config"; cfgtest 'trailing comment fails' 1
+cp "$TMP/home/config" "$G2/config"; cfgtest 'plain config passes' 0
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

@@ -20,16 +20,19 @@ HOME = os.path.expanduser("~")
 def config(key):
     """A value from $AGENT_OPS_HOME/config. A missing one exits 1: onFailure blocks the call, loudly."""
     path = os.path.join(os.environ.get("AGENT_OPS_HOME") or os.path.join(HOME, ".claude/agent-templates"), "config")
+    value = None
     try:
         for line in open(path):
             k, _, v = line.strip().partition("=")
-            if k == key and v.strip('"'):
-                value = v.strip('"')
-                if not value.startswith("/") or re.search(r"[$`'\\]", value):
-                    sys.exit(f"agent-ops: {key} in {path} must be a literal absolute path: bash and Python would read it differently")
-                return value
+            if k != key:
+                continue
+            if value is not None or not re.fullmatch(r'"/[^"$`\'\\]*"', v):
+                sys.exit(f"agent-ops: {key} in {path} must appear once, as a quoted literal absolute path: bash and Python read anything else differently")
+            value = v[1:-1]
     except OSError:
         pass
+    if value is not None:
+        return value
     sys.exit(f"agent-ops: {key} is not set in {path}; copy config.example")
 
 
