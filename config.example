@@ -1,4 +1,5 @@
-# Copy to ~/.claude/agent-templates/config (or $AGENT_OPS_HOME/config) and fill in. KEY=value lines, read by bash and Python.
+# Copy to ~/.claude/agent-templates/config (or $AGENT_OPS_HOME/config) and fill in. KEY="value" lines, read by bash and Python:
+# literal values, with no $VAR, ~ or single quotes.
 TEAM_ORG="<Claude org uuid of the company account>"
 PROFILES_DIR="<dir with one CLAUDE_CONFIG_DIR per profile>"
 CLAUDE_CLI_ROOT="<dir the newest CLI is under: */*/claude.app/Contents/MacOS/claude>"

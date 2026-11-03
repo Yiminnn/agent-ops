@@ -72,6 +72,15 @@ DP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); DG=$(ps -o pgid= -p "$DP
 expect 'worker leads its own group' "$DG" "$DP"
 kill -- "-$DP" 2>/dev/null
 
+# Round 1, item 9: $HOME in a guard path fails loudly instead of disabling the guard
+G=$(mktemp -d "$TMP/cfg.XXXXXX"); mkdir -p "$G/state"
+for v in '$HOME/x' '~/x' "'/x'" 'rel/x' '`pwd`/x'; do
+  sed "s|^PRIMARY_CHECKOUT=.*|PRIMARY_CHECKOUT=\"$v\"|" "$TMP/home/config" >"$G/config"
+  echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G" "$H/deny_merge_git.py" >/dev/null 2>&1; expect "bad config value $v" "$?" 1
+done
+sed 's|^PRIMARY_CHECKOUT=.*|PRIMARY_CHECKOUT="/a path/with spaces"|' "$TMP/home/config" >"$G/config"
+echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G" "$H/deny_merge_git.py" >/dev/null 2>&1; expect 'spaces are fine' "$?" 0
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

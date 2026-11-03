@@ -24,7 +24,10 @@ def config(key):
         for line in open(path):
             k, _, v = line.strip().partition("=")
             if k == key and v.strip('"'):
-                return v.strip('"')
+                value = v.strip('"')
+                if not value.startswith("/") or re.search(r"[$`'\\]", value):
+                    sys.exit(f"agent-ops: {key} in {path} must be a literal absolute path: bash and Python would read it differently")
+                return value
     except OSError:
         pass
     sys.exit(f"agent-ops: {key} is not set in {path}; copy config.example")
