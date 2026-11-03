@@ -15,7 +15,7 @@ A new coordinator ticks once, in full, before the old one stops. After that tick
 
 ## Steps
 
-1. **Probe.** Run `check.sh` (on the PATH while this plugin is loaded). It prints `NO CHANGE` or `CHANGED:` with `NEW`/`GONE` lines for PRs (every repo in `GH_REPOS`), the last deploy run, worker sessions with their final `STATUS:`, `ORG CHANGED`, SSO, disk and the external drive.
+1. **Probe.** Run `check.sh` (on the PATH while this plugin is loaded). It prints `NO CHANGE` or `CHANGED:` with `NEW`/`GONE` lines for PRs (every repo in `GH_REPOS`), the last deploy run, worker sessions with their final `STATUS:`, `ORG CHANGED`, SSO, disk and the external drive. If it exits 1 (`probe failed; last snapshot kept`), that is not `NO CHANGE`: nothing was observed. Retry next tick; report it if it repeats.
 2. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Search all channels and DMs with `after:` that ts, bots included. Then write the newest message ts back. Done when every message from the people `heartbeat-local.md` names, and every mention of the operator, is handled by the table below.
 3. **Act** on every change, using the table. Done when each `NEW` line and each Slack ask has an action or a stated reason for none.
 4. **Report** in Chinese, ASD-STE100 style, results first. With no change and no Slack ask: one line, `心跳：无变化。` Never repeat a decision request already sent with no new facts.
