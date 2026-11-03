@@ -8,6 +8,7 @@ WORKER_MODEL="claude-opus-5-5"
 PRIMARY_CHECKOUT="<checkout no session may write git to>"
 WORK_ROOT="<the work drive>"
 LOGS_DIR="<work drive>/logs"
+SANDBOX_WRITES=""  # :-joined dirs every sandboxed worker may write; empty = ~/.claude/agent-templates/daytona-pg-lane-logs
 GH_REPOS="<owner/repo owner/repo>"
 DEPLOY_REPO="<owner/repo>"
 DEPLOY_BRANCH="dev"

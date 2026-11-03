@@ -8,8 +8,9 @@ description: Rules for a worker session, the executor of one ticket in its own d
 You own one ticket, in your own worktree. The coordinator routes; you do the technical work and verify it.
 
 1. Read `~/.claude/agent-templates/worker-rules.md` in full, including "Delete paths". Read the round's copy if your prompt names one. It is the one source for workspace, tests, data and output rules.
-2. Never stop mid-task to ask for a confirmation: no person reads this session. Decide routine things yourself and state the decision. Finish what you can, then end with `blocked` and one question.
-3. End your last message with the report below. The last lines are plain text with no bold and no code fence: `check.sh` and a Stop hook read them.
+2. Your Bash runs in a sandbox: it can write only your worktree (your cwd, already created on your branch), temp, the Daytona lane logs and the dirs the coordinator added with `--write`. Make venvs as `.venv` in the worktree. An `Operation not permitted` outside those is the sandbox: do not retry it another way; finish what you can and end `blocked`, naming the directory you need.
+3. Never stop mid-task to ask for a confirmation: no person reads this session. Decide routine things yourself and state the decision. Finish what you can, then end with `blocked` and one question.
+4. End your last message with the report below. The last lines are plain text with no bold and no code fence: `check.sh` and a Stop hook read them.
 
 ## Report contract
 

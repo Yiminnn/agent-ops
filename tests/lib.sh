@@ -12,6 +12,7 @@ WORKER_MODEL="test-model"
 PRIMARY_CHECKOUT="$A"
 WORK_ROOT="$V"
 LOGS_DIR="$TMP/logs"
+SANDBOX_WRITES="$TMP/daytona-logs"
 GH_REPOS="o/app o/web"
 DEPLOY_REPO="o/app"
 DEPLOY_BRANCH="dev"
@@ -36,10 +37,11 @@ cat >"$STUB" <<'EOF'
 #!/bin/bash
 [ "$1" = auth ] && { printf '{"orgId":"%s"}\n' "$(cat "$CLAUDE_CONFIG_DIR/org")"; exit 0; }
 echo "STUB role=[$AGENT_OPS_ROLE] $*"
-echo "STUBPID $$"
+echo "STUBPID $$"; echo "STUBCWD $PWD"; echo "npm_cache=[${npm_config_cache:-}]"
 [ -n "${STUB_SLEEP:-}" ] && sleep "$STUB_SLEEP"
 [ -n "${STUB_REPORT:-}" ] && echo "STATUS: $STUB_REPORT"
 exit "${STUB_EXIT:-0}"
 EOF
-chmod +x "$STUB"; S="$ROOT/bin/session.sh"; REG="$TMP/home/state/sessions.tsv"; P="$TMP/p.md"; echo do-work >"$P"
+chmod +x "$STUB"; SB="$ROOT/bin/session.sh"; S="$TMP/session-nosb.sh"  # launches without a sandbox, for the tests of other features
+printf '#!/bin/bash\n[ "$1" = launch ] && set -- "$@" --no-sandbox\nexec "%s" "$@"\n' "$SB" >"$S"; chmod +x "$S"; REG="$TMP/home/state/sessions.tsv"; P="$TMP/p.md"; echo do-work >"$P"
 waitfor() { local i=0; until grep -q -- "$2" "$1" 2>/dev/null; do i=$((i+1)); [ $i -gt 50 ] && { bad "timeout waiting for $2 in $1"; return; }; sleep 0.1; done; ok; }
