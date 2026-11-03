@@ -1,6 +1,18 @@
 # Iterations
 
-Each suggestion, checked against the code and the official Claude Code docs. Applied only if it prevents a named failure (F1–F9 in the README's failure list) or fixes a reproduced bug, test first, one commit per change. GPT Pro answers are GPT Pro output; they were checked, not trusted.
+Each suggestion, checked against the code and the official Claude Code docs. Applied only if it prevents a named failure or fixes a reproduced bug, test first, one commit per change. GPT Pro answers are GPT Pro output; they were checked, not trusted.
+
+The named failures:
+
+- **F1** A test deleted most of a work drive, through Python, in a bypass-mode worker.
+- **F2** Queued resumes lived on that drive and failed silently.
+- **F3** A heartbeat was stopped for a handover nobody took: 4 hours with none.
+- **F4** An app restart killed all workers; recovery was manual.
+- **F5** A profile silently became a personal account.
+- **F6** A hand-written merge loop could merge an unreviewed head.
+- **F7** Review loops: fresh reviewers kept finding new things.
+- **F8** Coordinator context grew huge; workers stopped to ask with nobody there; `pkill -f` hit another session's tests.
+- **F9** Reports claimed things nobody had verified.
 
 ## Round 1 (GPT Pro output, `gpt-round-1.md`)
 
@@ -42,3 +54,18 @@ Each suggestion, checked against the code and the official Claude Code docs. App
 | 8 | A trailing slash on `WORK_ROOT` removes direct-child protection | **Accepted** `fec063d` | Reproduced. F1 |
 | 9 | `cd -- PATH` moves the guard to a wrong directory | **Accepted** `1428d4b` | Reproduced |
 | 10 | A failed `gh` reads as "all PRs gone", then `NO CHANGE`, and the watchdog stays quiet | **Accepted** `7d6d962` | Reproduced. F3. Exits 1 and keeps the last snapshot |
+
+## Round 3 (GPT Pro output, `gpt-round-3.md`), the last
+
+| # | Suggestion | Decision | Why |
+|---|---|---|---|
+| 1 | A dead waiter hides a live worker; a resume starts a second CLI on the same session. Keep the predecessor pid in a sidecar file | **Accepted, smaller** `63a1fd6` | Reproduced. F2, F4, F8. The registry already holds the worker row, so no sidecar. An explicit `--after` on another session's pid is not kept after its waiter dies |
+| – | From the same finding: a restart kills the waiter, since only workers had their own group | **Accepted** `2611cb6` | F4 |
+| 2 | A `StatusContext` has `context` and `state`, so `check.sh` shows `nullx1` and the merge helper quits on `BLOCKED` while CI is pending | **Accepted** `dd87770` | Reproduced with a stub. F6, F8. The repos looked at use check runs today, so this is a latent bug |
+| 3 | A coordinator that dies between Probe and Act loses the change, because the snapshot has moved | **Accepted** `adf180e` | Reproduced at shell level. F3, F4. One rule in the heartbeat skill. Not tested in a real coordinator |
+
+GPT Pro's own closing line: stop after these three. Stopped at the limit of 3 rounds.
+
+## Size
+
+Scripts other than tests: 529 lines before these rounds, 587 after (+11 %), and no script over 150. All lines of script: 735 to 1022 (+39 %), which is over the limit of about a third. The excess is `tests/regress.sh`, one block per reproduced bug. Keeping it: it is the proof that each fix holds, and none of it runs in a session.

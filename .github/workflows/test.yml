@@ -1,0 +1,15 @@
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-latest  # the scripts use BSD stat and df flags
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tests/run.sh
+      - run: npx -y @anthropic-ai/claude-code plugin validate --strict .
