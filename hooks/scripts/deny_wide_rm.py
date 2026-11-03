@@ -10,7 +10,7 @@ import os
 
 from cmdtext import HOME, config, path_of, run, walk
 
-WORK = config("WORK_ROOT")
+WORK = os.path.normpath(config("WORK_ROOT"))
 REASON = "agent-ops deny-rm: {} is a wide path. Delete only what you created in this task, by its full path."
 
 

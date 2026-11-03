@@ -147,6 +147,11 @@ G2=$(mktemp -d "$TMP/cfg2.XXXXXX"); mkdir -p "$G2/state"; cfgtest() {
 sed 's|^PRIMARY_CHECKOUT=\(.*\)|PRIMARY_CHECKOUT=\1 # main|' "$TMP/home/config" >"$G2/config"; cfgtest 'trailing comment fails' 1
 cp "$TMP/home/config" "$G2/config"; cfgtest 'plain config passes' 0
 
+# Round 2, item 8: WORK_ROOT with a trailing slash
+sed "s|^WORK_ROOT=.*|WORK_ROOT=\"$V/\"|" "$TMP/home/config" >"$G2/config"
+rmcheck() { CMD=$1 python3 -c 'import json,os;print(json.dumps({"tool_input":{"command":os.environ["CMD"]},"cwd":"/tmp"}))' | AGENT_OPS_HOME="$G2" "$H/deny_wide_rm.py"; }
+has 'slash root, child denied' "$(rmcheck "rm -rf $V/logs")" 'deny'; expect 'slash root, deep allowed' "$(rmcheck "rm -rf $V/worktrees/s/build")" ""
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
