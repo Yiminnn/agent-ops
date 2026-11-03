@@ -102,6 +102,17 @@ TP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); CP=$(awk '/^STUBPID/{pri
 expect 'worker gone with its wrapper' "$(kill -0 "$CP" 2>/dev/null && echo alive || echo gone)" gone; hasnt 'no clean end' "$(cat "$TMP/logs/tm.log")" 'session.sh end 0'
 STUB_EXIT=7 "$S" launch team ex7 "$P" >/dev/null; waitfor "$TMP/logs/ex7.log" 'session.sh end 7'
 
+# Round 2, item 2: the waiter cannot publish before the launcher does
+mkdir -p "$TMP/slow"; rm -f "$TMP/slow/n"; cat >"$TMP/slow/date" <<SLOW
+#!/bin/bash
+n=\$(cat "$TMP/slow/n" 2>/dev/null || echo 0); n=\$((n+1)); echo \$n >"$TMP/slow/n"
+[ "\$n" = 2 ] && /bin/sleep 1.5
+exec /bin/date "\$@"
+SLOW
+chmod +x "$TMP/slow/date"; "$S" launch team ord "$P" >/dev/null; waitfor "$TMP/logs/ord.log" STUB; sleep 0.3
+PATH="$TMP/slow:$PATH" "$S" resume ord "$P" --after 999999 >/dev/null; sleep 2.5
+hasnt 'latest row is not the waiter' "$(tail -1 <(grep '^ord	' "$TMP/home/state/sessions.tsv") | cut -f4)" waiting
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
