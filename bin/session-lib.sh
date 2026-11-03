@@ -8,7 +8,7 @@ LOGS="$LOGS_DIR"
 PROFILES="$PROFILES_DIR"
 PLUGIN_DIR=$(cd "$(dirname "$0")/.." && pwd)
 RECOVERY="Your previous turn was cut off by a restart. Before you repeat anything, check the worktree (git status, uncommitted work), git log on your branch, and the PR with its comments. Do not repeat an outside action (push, comment, merge, Linear, Slack) that already happened. Then continue the task and end with your STATUS report."
-mkdir -p "$PROMPTS" "$LOGS" "$(dirname "$REG")"
+mkdir -p "$PROMPTS" "$(dirname "$REG")"
 touch "$REG"
 
 die() { echo "session.sh: $*" >&2; exit 1; }
@@ -34,6 +34,7 @@ keep_prompt() {  # copy the prompt next to the registry; print the kept path
   cp "$1" "$dst" && echo "$dst"
 }
 run_claude() {  # profile sid mode(new|resume) prompt log [plugin]
+  [ -d "$LOGS" ] || die "no $LOGS: is the work drive mounted? Create it only after you check the drive"
   local B; B=$(cli); [ -x "$B" ] || die "no bundled claude CLI found"
   local flag=(--session-id "$2") role=""; [ "$3" = resume ] && flag=(--resume "$2")
   [ "${6:-}" = plugin ] && { flag+=(--plugin-dir "$PLUGIN_DIR"); role=worker; }

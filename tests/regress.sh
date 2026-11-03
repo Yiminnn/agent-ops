@@ -40,6 +40,15 @@ PATH="$TMP/fixed:$PATH" "$S" resume kp "$TMP/p1.md" >/dev/null; K1=$(tail -1 "$T
 PATH="$TMP/fixed:$PATH" "$S" resume kp "$TMP/p2.md" >/dev/null; K2=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f5)
 expect 'first prompt kept' "$(cat "$K1")" first; expect 'second prompt kept' "$(cat "$K2")" second
 
+# Round 1, item 6: a vanished logs dir stays vanished until setup; launch refuses
+mv "$TMP/logs" "$TMP/logs.away"; mkdir -p "$TMP/bin"; printf '#!/bin/bash\necho "[]"\n' >"$TMP/bin/gh"; printf '#!/bin/bash\nexit 0\n' >"$TMP/bin/aws"; chmod +x "$TMP/bin/gh" "$TMP/bin/aws"
+"$S" status >/dev/null; "$S" orgcheck >/dev/null
+expect 'status keeps it gone' "$([ -d "$TMP/logs" ] && echo there || echo gone)" gone
+has 'probe warns' "$(PATH="$TMP/bin:$PATH" "$ROOT/bin/check.sh")" 'DRIVE'
+expect 'launch refuses' "$("$S" launch team nolog "$P" 2>&1 | grep -c 'work drive')" 1
+expect 'dir still gone' "$([ -d "$TMP/logs" ] && echo there || echo gone)" gone
+mv "$TMP/logs.away" "$TMP/logs"; rm -f "$TMP/home/state/heartbeat.last"
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

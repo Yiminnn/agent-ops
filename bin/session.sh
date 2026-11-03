@@ -39,6 +39,7 @@ launch)
   [ -z "$(row "$name")" ] || die "name $name already in registry; pick another or use resume"
   [ "$client" = 1 ] && personal_ok=0
   need_org "$profile" "$personal_ok"
+  [ -d "$LOGS" ] || die "no $LOGS: is the work drive mounted? Create it only after you check the drive"
   kept=$(keep_prompt "$prompt" "$name") || exit 1
   plug=""; [ "${AGENT_OPS_PLUGIN:-0}" = 1 ] && plug=plugin
   sid=$(uuidgen | tr 'A-Z' 'a-z'); log="$LOGS/$name.log"
