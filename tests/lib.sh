@@ -16,7 +16,7 @@ GH_REPOS="o/app o/web"
 DEPLOY_REPO="o/app"
 DEPLOY_BRANCH="dev"
 BOT_REVIEWERS="codex"
-SSO_PROFILE="p"
+SSO_PROFILES="p"
 CONF
 pass=0; fail=0
 ok() { pass=$((pass+1)); }

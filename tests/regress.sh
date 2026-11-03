@@ -196,6 +196,19 @@ rm -f "$TMP/cnt" "$TMP/mlog"; rollup BLOCKED FAILURE >"$TMP/views"; O=$(MS); exp
 rm -f "$TMP/cnt"; rollup BLOCKED ERROR >"$TMP/views"; O=$(MS); has 'error status stops' "$O" 'checks failed: ci'
 rm -f "$TMP/cnt"; rollup BLOCKED PENDING >"$TMP/views"; O=$(MS); has 'pending is a wait, not BLOCKED' "$O" 'timeout'
 
+# Cached role credentials on one profile can hide an expired SSO token: every profile must pass
+mkdir -p "$TMP/sso" "$TMP/ssohome/state"; cat >"$TMP/sso/aws" <<'AWS'
+#!/bin/bash
+case " $* " in *" $BAD_PROFILE "*) echo "Error loading SSO Token: Token has expired" >&2; exit 255 ;; esac
+exit 0
+AWS
+printf '#!/bin/bash\necho "[]"\n' >"$TMP/sso/gh"; chmod +x "$TMP/sso/aws" "$TMP/sso/gh"
+sed 's|^SSO_PROFILES=.*|SSO_PROFILES="prod-prof dev-prof"|' "$TMP/home/config" >"$TMP/ssohome/config"
+SSOP() { rm -f "$TMP/ssohome/state/heartbeat.last"; BAD_PROFILE=$1 AGENT_OPS_HOME="$TMP/ssohome" PATH="$TMP/sso:$PATH" "$ROOT/bin/check.sh"; }
+O=$(SSOP none); has 'both pass: ok' "$O" 'SSO ok'; hasnt 'both pass: not expired' "$O" 'SSO EXPIRED'
+O=$(SSOP dev-prof); has 'second fails: expired' "$O" 'SSO EXPIRED'; hasnt 'second fails: not ok' "$O" 'SSO ok'
+O=$(SSOP prod-prof); has 'first fails: expired' "$O" 'SSO EXPIRED'; hasnt 'first fails: not ok' "$O" 'SSO ok'
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
