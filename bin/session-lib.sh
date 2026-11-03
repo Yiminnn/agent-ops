@@ -18,6 +18,7 @@ need_org() {  # profile personal_ok; sets org
   org=$(org_of "$1"); [ -n "$org" ] || die "cannot read the org of profile $1 (logged out?)"
   [ "$org" = "$TEAM_ORG" ] || [ "$2" = 1 ] || die "profile $1 is personal org $org; use a team profile, or pass --personal-ok if this work holds no client data"
 }
+client_mark() { echo "$T/state/client-$1"; }  # holds no data: says this sid may not leave the team org
 row() { awk -F'\t' -v n="$1" '$1==n' "$REG" | tail -1; }
 field() { cut -f"$2" <<<"$1"; }
 add_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$(date -u +%FT%TZ)" "$7" "${8:-}" >>"$REG"; }

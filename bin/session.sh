@@ -42,6 +42,7 @@ launch)
   kept=$(keep_prompt "$prompt" "$name") || exit 1
   plug=""; [ "${AGENT_OPS_PLUGIN:-0}" = 1 ] && plug=plugin
   sid=$(uuidgen | tr 'A-Z' 'a-z'); log="$LOGS/$name.log"
+  [ "$client" = 1 ] && { : >"$(client_mark "$sid")" || die "cannot write the client-data marker"; }
   pid=$(run_claude "$profile" "$sid" new "$kept" "$log" "$plug")
   add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug"
   echo "launched $name pid=$pid sid=$sid profile=$profile log=$log"
@@ -51,6 +52,8 @@ resume)
   name=$1 prompt=$2
   r=$(row "$name"); [ -n "$r" ] || die "no session $name in registry"
   profile=$(field "$r" 2) sid=$(field "$r" 3) log=$(field "$r" 6) plug=$(field "$r" 9)
+  [ "$client" = 1 ] && { : >"$(client_mark "$sid")" || die "cannot write the client-data marker"; }
+  [ -e "$(client_mark "$sid")" ] && personal_ok=0
   need_org "$profile" "$personal_ok"
   kept=$(keep_prompt "$prompt" "$name") || exit 1
   live=$(field "$r" 4)
@@ -71,7 +74,7 @@ resume)
 _run)  # internal: the waiter's hand-off once the blocking pid exits. No third arg: a waiter queued before the org check.
   name=$1 kept=$2; r=$(row "$name"); log=$(field "$r" 6)
   [ -s "$kept" ] || { echo "session.sh: queued prompt vanished: $kept" >>"$log"; exit 1; }
-  if [ "${3:-}" = check ] && [ "$(org_of "$(field "$r" 2)")" != "$TEAM_ORG" ]; then
+  if { [ "${3:-}" = check ] || [ -e "$(client_mark "$(field "$r" 3)")" ]; } && [ "$(org_of "$(field "$r" 2)")" != "$TEAM_ORG" ]; then
     echo "session.sh: queued resume refused: profile $(field "$r" 2) is no longer the team org" >>"$log"; exit 1
   fi
   pid=$(run_claude "$(field "$r" 2)" "$(field "$r" 3)" resume "$kept" "$log" "$(field "$r" 9)")
