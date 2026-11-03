@@ -133,6 +133,13 @@ printf 'sm\tteam\tsid\t2222\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/sm.log" "$
 has 'new run shows' "$(CK)" 'SESSION sm done STATUS:ready'
 hasnt 'no STATUS, no pid' "$(grep 'SESSION w ' "$TMP/home/state/heartbeat.last" 2>/dev/null; grep 'SESSION kp' "$TMP/home/state/heartbeat.last")" 'pid='
 
+# Round 2, item 6: an explicit --after must not bypass the running worker
+STUB_SLEEP=20 "$S" launch team af "$P" >/dev/null; waitfor "$TMP/logs/af.log" STUB; AP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4)
+expect 'dead --after refused while live' "$("$S" resume af "$P" --after 999999 2>&1 | grep -c 'still running')" 1
+expect 'no new row' "$(grep -c '^af	' "$TMP/home/state/sessions.tsv")" 1
+has 'current pid is fine' "$("$S" resume af "$P" --after "$AP")" 'queued af'
+for p in $(awk -F'\t' '$1=="af"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
