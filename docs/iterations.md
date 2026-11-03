@@ -27,3 +27,18 @@ Each suggestion, checked against the code and the official Claude Code docs. App
 | claude-squad, gastown, pmtui: workers outlive the parent | F4. `nohup` shares the launcher's process group | **Accepted** `6f47d89`: `setsid` per worker. Not tested against a real app restart |
 | gastown: cap on re-dispatch | No failure yet from a resume loop; recover runs on the first tick only | **Rejected for now** |
 | ameise, BVarvill: narrow tool lists for reviewers | No named failure. Keeping Bash leaves shell writes open | **Rejected** |
+
+## Round 2 (GPT Pro output, `gpt-round-2.md`)
+
+| # | Suggestion | Decision | Why |
+|---|---|---|---|
+| 1 | The registered pid became a wrapper; `kill <pid>` leaves the CLI alive and a resume starts a second one | **Accepted** `1081dc3` | Reproduced, a bug in round 1's end marker. F8. The wrapper forwards TERM to its own group. Checked with the real CLI: the group is gone after TERM, and `recover` lists the row |
+| 2 | The waiter can publish its running row before the launcher publishes `waiting` | **Accepted** `bdc6c1f` | Reproduced with a slow `date` stub. F2. New evidence against round 1's "one coordinator, no race". Still no lock |
+| 3 | A dead queued resume shows the old STATUS, and an old log hides it | **Accepted** `043011b` | Reproduced. F2, F4, F9 |
+| 4 | The 64 KiB tail hides the run marker, so the end-marker rule stops working | **Accepted** `3cfd6e2` | Reproduced. F4, F9 |
+| 5 | A resume that ends with the same STATUS is `NO CHANGE` | **Accepted, smaller** `8c978f6` | Reproduced. F8, F9. Adds the pid only to rows with a STATUS, so older rows keep their baseline line |
+| 6 | An explicit `--after` bypasses the live worker | **Accepted** `5df68e7` | Reproduced. F2, F8 |
+| 7 | Duplicate keys or a comment in the config: bash and Python read different paths | **Accepted** `9f0b309` | Reproduced. Guards went to the wrong path |
+| 8 | A trailing slash on `WORK_ROOT` removes direct-child protection | **Accepted** `fec063d` | Reproduced. F1 |
+| 9 | `cd -- PATH` moves the guard to a wrong directory | **Accepted** `1428d4b` | Reproduced |
+| 10 | A failed `gh` reads as "all PRs gone", then `NO CHANGE`, and the watchdog stays quiet | **Accepted** `7d6d962` | Reproduced. F3. Exits 1 and keeps the last snapshot |
