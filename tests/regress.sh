@@ -170,6 +170,12 @@ has 'recover queues behind the worker' "$("$S" recover --go dw)" 'queued dw afte
 sleep 0.3; expect 'no second CLI' "$(grep -c '^STUBPID' "$TMP/logs/dw.log")" 1
 for p in $(awk -F'\t' '$1=="dw"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
 
+# Failure 4: a queued resume leaves the launcher's process group, like a worker
+STUB_SLEEP=8 "$S" launch team wg "$P" >/dev/null; waitfor "$TMP/logs/wg.log" STUB
+"$S" resume wg "$P" >/dev/null; WGP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); WGP=${WGP#waiting:}; sleep 0.3
+expect 'waiter leads its own group' "$(ps -o pgid= -p "$WGP" | tr -d ' ')" "$WGP"
+for p in $(awk -F'\t' '$1=="wg"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

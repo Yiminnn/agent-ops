@@ -67,7 +67,7 @@ resume)
   if [ -n "$after" ]; then
     # Detached waiter; the prompt is already on the internal disk, so a wiped external drive cannot drop it.
     recheck=check; [ "$personal_ok" = 1 ] && recheck=""
-    nohup bash -c 'while kill -0 "$6" 2>/dev/null; do sleep 0.05; done; while kill -0 "$1" 2>/dev/null; do sleep 30; done; exec "$2" _run "$3" "$4" "$5"' _ \
+    nohup python3 -c "$SETSID" bash -c 'while kill -0 "$6" 2>/dev/null; do sleep 0.05; done; while kill -0 "$1" 2>/dev/null; do sleep 30; done; exec "$2" _run "$3" "$4" "$5"' _ \
       "$after" "$0" "$name" "$kept" "$recheck" "$$" </dev/null >>"$log" 2>&1 &
     add_row "$name" "$profile" "$sid" "waiting:$!" "$kept" "$log" "$org" "$plug"
     echo "queued $name after pid $after (waiter $!)"

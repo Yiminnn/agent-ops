@@ -11,6 +11,7 @@ RECOVERY="Your previous turn was cut off by a restart. Before you repeat anythin
 mkdir -p "$PROMPTS" "$(dirname "$REG")"
 touch "$REG"
 
+SETSID='import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])'  # own session and group: a kill of the parent group misses it
 die() { echo "session.sh: $*" >&2; exit 1; }
 cli() { [ -n "${CLAUDE_CLI:-}" ] && { echo "$CLAUDE_CLI"; return; }; ls "$CLAUDE_CLI_ROOT/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1; }
 org_of() { CLAUDE_CONFIG_DIR="$PROFILES/$1" "$(cli)" auth status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("orgId",""))'; }
@@ -41,7 +42,7 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin]
   cd "$PRIMARY_CHECKOUT" || die "no $PRIMARY_CHECKOUT"
   echo "--- session.sh run $(date -u +%FT%TZ) ---" >>"$5" || die "cannot write $5"
   AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
-    nohup python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' bash -c 'trap "trap - TERM; kill -TERM -- -$$" TERM; "$@" & c=$!; wait "$c"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
+    nohup python3 -c "$SETSID" bash -c 'trap "trap - TERM; kill -TERM -- -$$" TERM; "$@" & c=$!; wait "$c"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &
   echo $!
 }
