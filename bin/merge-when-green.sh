@@ -12,9 +12,9 @@ while :; do
   head=$(jq -r .headRefOid <<<"$j"); state=$(jq -r .state <<<"$j")
   [ "$state" = OPEN ] || { echo "PR is $state"; exit 2; }
   [[ "$head" == "$sha"* ]] || { echo "head moved: $head is not the reviewed $sha; not merging"; exit 2; }
-  fail=$(jq -r '[.statusCheckRollup[]|select((.conclusion//"")|test("FAILURE|CANCELLED|TIMED_OUT|ACTION_REQUIRED"))|.name]|join(", ")' <<<"$j")
+  fail=$(jq -r '[.statusCheckRollup[]|select((.conclusion // .state // "")|test("FAILURE|ERROR|CANCELLED|TIMED_OUT|ACTION_REQUIRED"))|(.name // .context)]|join(", ")' <<<"$j")
   [ -z "$fail" ] || { echo "checks failed: $fail"; exit 2; }
-  pending=$(jq -r '[.statusCheckRollup[]|select((.status//"COMPLETED")!="COMPLETED")|.name]|length' <<<"$j")
+  pending=$(jq -r '[.statusCheckRollup[]|select(((.status//"COMPLETED")!="COMPLETED") or .state=="PENDING" or .state=="EXPECTED")]|length' <<<"$j")
   mstate=$(jq -r .mergeStateStatus <<<"$j")
   if [ "$pending" = 0 ] && [ "$mstate" = CLEAN ]; then
     gh pr merge "$pr" -R "$repo" "$method" --match-head-commit "$head" || { echo "merge refused by GitHub"; exit 2; }

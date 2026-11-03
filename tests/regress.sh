@@ -176,6 +176,26 @@ STUB_SLEEP=8 "$S" launch team wg "$P" >/dev/null; waitfor "$TMP/logs/wg.log" STU
 expect 'waiter leads its own group' "$(ps -o pgid= -p "$WGP" | tr -d ' ')" "$WGP"
 for p in $(awk -F'\t' '$1=="wg"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
 
+# Round 3, item 2: a StatusContext has context and state, not name and conclusion
+mkdir -p "$TMP/sc"; cat >"$TMP/sc/gh" <<'GH'
+#!/bin/bash
+case " $* " in
+  *" pr list "*) cat "$PRJSON" ;;
+  *" run list "*) ;;
+  *" merge "*) echo called >>"$MERGELOG"; exit 0 ;;
+  *headRefOid*) n=$(cat "$CNT" 2>/dev/null || echo 0); echo $((n+1)) >"$CNT"; sed -n "$((n+1))p;\$p" "$VIEWS" | head -1 ;;
+  *mergeCommit*) echo '{"state":"MERGED","mergeCommit":{"oid":"deadbeef1234"}}' ;;
+esac
+GH
+chmod +x "$TMP/sc/gh"; prj() { printf '[{"number":7,"title":"t","headRefOid":"abc","reviewDecision":"APPROVED","latestReviews":[],"isDraft":false,"statusCheckRollup":[{"__typename":"StatusContext","context":"ci","state":"%s"}]}]\n' "$1" >"$TMP/pr.json"; }
+SC() { PRJSON="$TMP/pr.json" PATH="$TMP/sc:$TMP/bin:$PATH" "$ROOT/bin/check.sh"; }
+prj PENDING; has 'pending status shows' "$(SC)" 'checks=[PENDINGx1]'; prj SUCCESS; has 'status change shows' "$(SC)" 'checks=[SUCCESSx1]'
+rollup() { printf '{"headRefOid":"abc1234f","state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"%s","statusCheckRollup":[{"__typename":"StatusContext","context":"ci","state":"%s"}]}\n' "$1" "$2"; }
+MS() { PATH="$TMP/sc:$PATH" CNT="$TMP/cnt" VIEWS="$TMP/views" MERGELOG="$TMP/mlog" "$ROOT/bin/merge-when-green.sh" o/r 1 abc1234f --squash --timeout-min 0; }
+rm -f "$TMP/cnt" "$TMP/mlog"; rollup BLOCKED FAILURE >"$TMP/views"; O=$(MS); expect 'failed status stops' "$?" 2; has 'names the status' "$O" 'checks failed: ci'; expect 'no merge on failure' "$(cat "$TMP/mlog" 2>/dev/null)" ""
+rm -f "$TMP/cnt"; rollup BLOCKED ERROR >"$TMP/views"; O=$(MS); has 'error status stops' "$O" 'checks failed: ci'
+rm -f "$TMP/cnt"; rollup BLOCKED PENDING >"$TMP/views"; O=$(MS); has 'pending is a wait, not BLOCKED' "$O" 'timeout'
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
