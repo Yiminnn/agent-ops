@@ -113,6 +113,11 @@ chmod +x "$TMP/slow/date"; "$S" launch team ord "$P" >/dev/null; waitfor "$TMP/l
 PATH="$TMP/slow:$PATH" "$S" resume ord "$P" --after 999999 >/dev/null; sleep 2.5
 hasnt 'latest row is not the waiter' "$(tail -1 <(grep '^ord	' "$TMP/home/state/sessions.tsv") | cut -f4)" waiting
 
+# Round 2, item 3: a dead waiter has no final status, and an old log does not hide it
+printf -- '--- session.sh run x ---\nSTATUS: ready\nEVIDENCE: y\n--- session.sh end 0\n' >"$TMP/logs/dq.log"; printf 'dq\tteam\tsid\twaiting:999999\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/dq.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"
+hasnt 'dead waiter shows no old word' "$("$S" status | grep '^dq ')" 'ready'
+touch -t 202001010000 "$TMP/logs/dq.log"; has 'old log does not hide it' "$("$S" status)" 'dq '
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
