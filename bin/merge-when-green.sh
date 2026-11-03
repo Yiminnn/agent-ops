@@ -18,7 +18,12 @@ while :; do
   mstate=$(jq -r .mergeStateStatus <<<"$j")
   if [ "$pending" = 0 ] && [ "$mstate" = CLEAN ]; then
     gh pr merge "$pr" -R "$repo" "$method" --match-head-commit "$head" || { echo "merge refused by GitHub"; exit 2; }
-    gh pr view "$pr" -R "$repo" --json state,mergeCommit --jq '"merged \(.mergeCommit.oid[0:9])"'; exit 0
+    for try in 1 2; do  # a merge queue, or a failed read, leaves the merge unconfirmed
+      r=$(gh pr view "$pr" -R "$repo" --json state,mergeCommit) && jq -e '.state == "MERGED" and .mergeCommit.oid != null' <<<"$r" >/dev/null &&
+        { jq -r '"merged \(.mergeCommit.oid[0:9])"' <<<"$r"; exit 0; }
+      sleep 2
+    done
+    echo "merge sent, not confirmed: check PR $pr"; exit 2
   fi
   [ "$pending" = 0 ] && [ "$mstate" != UNKNOWN ] && [ "$mstate" != UNSTABLE ] && { echo "not mergeable: $mstate"; exit 2; }
   [ "$(date +%s)" -lt "$deadline" ] || { echo "timeout after ${tmo}m (pending=$pending state=$mstate)"; exit 2; }

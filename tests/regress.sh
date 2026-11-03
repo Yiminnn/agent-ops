@@ -81,6 +81,21 @@ done
 sed 's|^PRIMARY_CHECKOUT=.*|PRIMARY_CHECKOUT="/a path/with spaces"|' "$TMP/home/config" >"$G/config"
 echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G" "$H/deny_merge_git.py" >/dev/null 2>&1; expect 'spaces are fine' "$?" 0
 
+# Round 1, item 10: no success without a confirmed merge
+GHS="$TMP/ghs"; mkdir -p "$GHS"
+cat >"$GHS/gh" <<'GH'
+#!/bin/bash
+case " $* " in
+  *" merge "*) exit 0 ;;
+  *headRefOid*) echo '{"headRefOid":"abc1234f","state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","statusCheckRollup":[]}' ;;
+  *mergeCommit*) [ "$VIEW" = fail ] && exit 1; cat "$VIEWJSON" ;;
+esac
+GH
+chmod +x "$GHS/gh"; MG() { PATH="$GHS:$PATH" VIEW=$1 VIEWJSON="$TMP/view.json" "$ROOT/bin/merge-when-green.sh" o/r 1 abc1234f; }
+echo '{"state":"OPEN","mergeCommit":null}' >"$TMP/view.json"; O=$(MG ok); expect 'queued is not merged' "$?" 2; hasnt 'no merged line' "$O" 'merged '
+O=$(MG fail); expect 'failed view is not merged' "$?" 2; hasnt 'no merged line 2' "$O" 'merged '
+echo '{"state":"MERGED","mergeCommit":{"oid":"deadbeef1234"}}' >"$TMP/view.json"; O=$(MG ok); expect 'merged exits 0' "$?" 0; has 'merged line' "$O" 'merged deadbeef1'
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
