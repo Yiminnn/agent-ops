@@ -11,7 +11,7 @@ State is in `~/.claude/agent-templates` (or `$AGENT_OPS_HOME`), outside this plu
 
 ## Handover
 
-A new coordinator ticks once, in full, before the old one stops. After that tick it logs `<UTC> handover tick by <sid>` in `state/coordinator.md`; the old one stops its cron only after it sees that line. On its first tick the new coordinator runs `session.sh recover` and reads the list. It runs `session.sh recover --go` when the rows were cut off by a restart; `legacy` rows resume only by name. To stop with no successor, `touch state/heartbeat.stopped`, so the watchdog stays quiet; remove the file when you start again.
+A new coordinator ticks once, in full, before the old one stops. After that tick it logs `<UTC> handover tick by <sid>` in `state/coordinator.md`; the old one stops its cron only after it sees that line. On its first tick after a start or a recovery, the coordinator reads the whole of `state/heartbeat.last` and reconciles PRs and finished sessions against `state/coordinator.md` and live GitHub, even if the probe says `NO CHANGE`: the old coordinator may have stopped between Probe and Act. It checks whether each outside action already happened before it does one. It also runs `session.sh recover` and reads the list. It runs `session.sh recover --go` when the rows were cut off by a restart; `legacy` rows resume only by name. To stop with no successor, `touch state/heartbeat.stopped`, so the watchdog stays quiet; remove the file when you start again.
 
 ## Steps
 
