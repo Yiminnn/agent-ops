@@ -11,14 +11,20 @@ State is in `~/.claude/agent-templates` (or `$AGENT_OPS_HOME`), outside this plu
 
 ## Handover
 
-A new coordinator ticks once, in full, before the old one stops. After that tick it logs `<UTC> handover tick by <sid>` in `state/coordinator.md`; the old one stops its cron only after it sees that line. On its first tick after a start or a recovery, the coordinator reads the whole of `state/heartbeat.last` and reconciles PRs and finished sessions against `state/coordinator.md` and live GitHub, even if the probe says `NO CHANGE`: the old coordinator may have stopped between Probe and Act. It checks whether each outside action already happened before it does one. It also runs `session.sh recover` and reads the list. It runs `session.sh recover --go` when the rows were cut off by a restart; `legacy` rows resume only by name. To stop with no successor, `touch state/heartbeat.stopped`, so the watchdog stays quiet; remove the file when you start again.
+Only one coordinator acts at a time. The old one stops first: it deletes its cron, lets a running tick finish, and logs `<UTC> handover release by <sid>` in `state/coordinator.md`. Until that line exists, the new one only reads: it may run Probe and read Slack, but it does no step 3 action. After the line, it logs `<UTC> handover take by <sid>` and ticks in full. If the old session is dead and cannot write the line, the new one confirms that no `release` or `tick` line from the old sid is newer than 30 minutes, logs `<UTC> handover take by <sid> (old <sid> unresponsive)`, and goes on. On its first tick after a start or a recovery, the coordinator reads the whole of `state/heartbeat.last` and reconciles PRs and finished sessions against `state/coordinator.md` and live GitHub, even if the probe says `NO CHANGE`: the old coordinator may have stopped between Probe and Act. It checks whether each outside action already happened before it does one. It also runs `session.sh recover` and reads the list. It runs `session.sh recover --go` when the rows were cut off by a restart; `legacy` rows resume only by name. To stop with no successor, `touch state/heartbeat.stopped`, so the watchdog stays quiet; remove the file when you start again.
 
 ## Steps
 
 1. **Probe.** Run `check.sh` (on the PATH while this plugin is loaded). It prints `NO CHANGE` or `CHANGED:` with `NEW`/`GONE` lines for PRs (every repo in `GH_REPOS`), the last deploy run, worker sessions with their final `STATUS:`, `ORG CHANGED`, SSO, disk and the external drive. If it exits 1 (`probe failed; last snapshot kept`), that is not `NO CHANGE`: nothing was observed. Retry next tick; report it if it repeats.
-2. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Search all channels and DMs with `after:` that ts, bots included. Then write the newest message ts back. Done when every message from the people `heartbeat-local.md` names, and every mention of the operator, is handled by the table below.
-3. **Act** on every change, using the table. Done when each `NEW` line and each Slack ask has an action or a stated reason for none.
-4. **Report** in Chinese, ASD-STE100 style, results first. With no change and no Slack ask: one line, `心跳：无变化。` Never repeat a decision request already sent with no new facts.
+2. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Search all channels and DMs with `after:` that ts, bots included. Done when every message from the people `heartbeat-local.md` names, and every mention of the operator, is handled by the table below. Move the ts forward only past messages that are handled, or that have a line in `state/pending.md`; a crash before that point reads them again next tick.
+3. **Open work.** The probe diff says what changed; it does not say what is still undone. A tick that died after Probe leaves no diff, so derive the work from live state every tick, even on `NO CHANGE`:
+   - each open, non-draft PR whose current head has no review by the operator's login (`gh api user -q .login`) at that head;
+   - each PR approved by the required reviewer with checks green and not merged;
+   - each session row `done STATUS:<x> pid=<p>` with no line `session <name> <p>` in `state/handled.txt`;
+   - each line in `state/pending.md`.
+4. **Act** on every item of steps 1–3, using the table. Done when each item has an action or a stated reason for none. After you act on a session, append `session <name> <pid>` to `state/handled.txt`. Before an outside action that must not run twice (merge, deploy, Slack reply, file upload), check live state that it has not happened.
+5. **Done.** Write `<UTC> ok` (or `<UTC> failed: <reason>`) to `state/heartbeat.done`. The watchdog reads this file: `heartbeat.last` changes at Probe, before the tick has done its work.
+6. **Report** in Chinese, ASD-STE100 style, results first. With no change, no open work and no Slack ask: one line, `心跳：无变化。` Never repeat a decision request already sent with no new facts.
 
 ## What to do per change
 
@@ -39,7 +45,8 @@ A new coordinator ticks once, in full, before the old one stops. After that tick
 | Anyone else asks the operator | Answer facts directly; scope or product calls go to the operator as a decision. |
 | `SSO EXPIRED` | Follow the SSO command in `heartbeat-local.md`. |
 | `DRIVE ... missing or wiped`, or `DISK` low | Stop launching work; PushNotification to the operator. |
-| Decision only the operator can make | PushNotification, one Chinese line, ≤200 characters. |
+| Decision only the operator can make | PushNotification, one Chinese line, ≤200 characters. Add it to `state/pending.md` (who, question, since, link); remove the line when answered. |
+| Line in `state/pending.md` | Act if its answer or trigger has arrived; else leave it. Do not resend it. |
 
 ## Launching and resuming workers
 
