@@ -162,6 +162,14 @@ CK >/dev/null; BEFORE=$(cat "$TMP/home/state/heartbeat.last"); touch -t 20200101
 O=$(PATH="$TMP/bad:$TMP/bin:$PATH" "$ROOT/bin/check.sh" 2>&1); expect 'failed probe exits 1' "$?" 1; has 'failed probe says so' "$O" 'probe failed'; hasnt 'no NO CHANGE' "$O" 'NO CHANGE'
 expect 'snapshot kept' "$(cat "$TMP/home/state/heartbeat.last")" "$BEFORE"; expect 'mtime kept' "$(find "$TMP/home/state/heartbeat.last" -mmin +5 | wc -l | tr -d ' ')" 1
 
+# Round 3, item 1: the waiter died, the worker lives: no second turn
+STUB_SLEEP=20 "$S" launch team dw "$P" >/dev/null; waitfor "$TMP/logs/dw.log" STUBPID; DWP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4)
+"$S" resume dw "$P" >/dev/null; WP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); kill "${WP#waiting:}"; sleep 0.3
+expect 'dead --after refused' "$("$S" resume dw "$P" --after 999999 2>&1 | grep -c 'still running')" 1
+has 'recover queues behind the worker' "$("$S" recover --go dw)" 'queued dw after pid'
+sleep 0.3; expect 'no second CLI' "$(grep -c '^STUBPID' "$TMP/logs/dw.log")" 1
+for p in $(awk -F'\t' '$1=="dw"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

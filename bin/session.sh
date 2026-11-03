@@ -58,6 +58,9 @@ resume)
   need_org "$profile" "$personal_ok"
   kept=$(keep_prompt "$prompt" "$name") || exit 1
   live=$(field "$r" 4)
+  if [[ "$live" == waiting:* ]] && ! alive "$live"; then  # the waiter died; its worker may not have
+    live=$(awk -F'\t' -v n="$name" '$1==n && $4 !~ /^waiting:/ {p=$4} END {print p}' "$REG")
+  fi
   [[ "$live" == waiting:* ]] && alive "$live" && die "$name already has a queued resume (waiter ${live#waiting:}); wait for it to start, or add this to its prompt"
   [ -n "$after" ] && alive "$live" && [ "$after" != "${live#waiting:}" ] && die "$name is still running; --after must name its current worker pid"
   if [ -z "$after" ] && alive "$live"; then after=${live#waiting:}; fi  # never run two turns at once
