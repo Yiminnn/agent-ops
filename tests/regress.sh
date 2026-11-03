@@ -125,6 +125,14 @@ lg ''; has 'long, no end: interrupted' "$("$S" recover)" 'interrupted ln'
 lg '--- session.sh end 1\n'; has 'long, end 1: interrupted' "$("$S" recover)" 'interrupted ln'
 lg '--- session.sh end 0\n'; has 'long, end 0: final' "$("$S" status | grep '^ln ')" 'ready'
 
+# Round 2, item 5: same STATUS, new run, still a change; rows with no STATUS keep their line
+mkdir -p "$TMP/bin"; printf '#!/bin/bash\necho "[]"\n' >"$TMP/bin/gh"; printf '#!/bin/bash\nexit 0\n' >"$TMP/bin/aws"; chmod +x "$TMP/bin/gh" "$TMP/bin/aws"
+printf -- 'STATUS: ready\n' >"$TMP/logs/sm.log"; printf 'sm\tteam\tsid\t1111\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/sm.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"
+CK() { PATH="$TMP/bin:$PATH" "$ROOT/bin/check.sh"; }; CK >/dev/null; expect 'same again is no change' "$(CK)" 'NO CHANGE'
+printf 'sm\tteam\tsid\t2222\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/sm.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"
+has 'new run shows' "$(CK)" 'SESSION sm done STATUS:ready'
+hasnt 'no STATUS, no pid' "$(grep 'SESSION w ' "$TMP/home/state/heartbeat.last" 2>/dev/null; grep 'SESSION kp' "$TMP/home/state/heartbeat.last")" 'pid='
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
