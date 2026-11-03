@@ -1,0 +1,21 @@
+{
+  "description": "agent-ops guards. PreToolUse fail closed. onFailure has no effect on Stop (documented), and a broken SessionStart must not stop the coordinator from starting.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/deny_kill.py\"", "timeout": 10, "onFailure": "block"},
+          {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/deny_merge_git.py\"", "timeout": 10, "onFailure": "block"},
+          {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/deny_wide_rm.py\"", "timeout": 10, "onFailure": "block"}
+        ]
+      }
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop_status.py\"", "timeout": 10, "onFailure": "continue"}]}
+    ],
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start.sh\"", "timeout": 30, "onFailure": "continue"}]}
+    ]
+  }
+}
