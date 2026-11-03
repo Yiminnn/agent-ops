@@ -24,9 +24,9 @@ field() { cut -f"$2" <<<"$1"; }
 add_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$(date -u +%FT%TZ)" "$7" "${8:-}" >>"$REG"; }
 latest() { awk -F'\t' '{last[$1]=$0; order[$1]=NR} END {for (n in last) print order[n] "\t" last[n]}' "$REG" | sort -n | cut -f2-; }
 alive() { local p=${1#waiting:}; [[ "$p" =~ ^[1-9][0-9]*$ ]] && kill -0 "$p" 2>/dev/null; }
-final_status() {  # the last STATUS word since the last run marker, or nothing
+final_status() {  # the last STATUS word of the last run, if that run ended with exit 0; a log with no markers predates them
   [ -f "$1" ] || return 0
-  tail -c 65536 "$1" | awk '/^--- session.sh run /{s=""} $1=="STATUS:" && $2 ~ /^(ready|waiting|blocked|failed)$/{s=$2} END{print s}'
+  tail -c 65536 "$1" | awk '/^--- session.sh run /{s=""; m=1; e=""} /^--- session.sh end /{e=$4} $1=="STATUS:" && $2 ~ /^(ready|waiting|blocked|failed)$/{s=$2} END{if (m && e!="0") s=""; print s}'
 }
 keep_prompt() {  # copy the prompt next to the registry; print the kept path
   [ -s "$1" ] || die "prompt file missing or empty: $1"
@@ -41,7 +41,7 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin]
   cd "$PRIMARY_CHECKOUT" || die "no $PRIMARY_CHECKOUT"
   echo "--- session.sh run $(date -u +%FT%TZ) ---" >>"$5" || die "cannot write $5"
   AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
-    nohup "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
+    nohup bash -c '"$@"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &
   echo $!
 }

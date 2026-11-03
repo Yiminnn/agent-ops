@@ -57,6 +57,15 @@ mv "$A" "$A.away"; O=$("$S" resume bres "$P" 2>&1); RC=$?; mv "$A.away" "$A"
 expect 'resume fails' "$RC" 1; hasnt 'no resumed line' "$O" 'resumed'
 echo personal-org >"$TMP/profiles/team/org"; "$S" recover --go bres >/dev/null 2>&1; expect 'recover passes the failure on' "$?" 1; echo "$TEAM" >"$TMP/profiles/team/org"
 
+# Round 1, item 7, by a smaller route: a run with no clean end has no final STATUS
+fake() { printf 'fk\tteam\tsid\t999999\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/fk.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"; }
+printf -- '--- session.sh run x ---\nSTATUS: waiting\nEVIDENCE: y\n' >"$TMP/logs/fk.log"; fake
+has 'killed after STATUS is interrupted' "$("$S" recover)" 'interrupted fk'; hasnt 'killed shows no word' "$("$S" status | grep '^fk ')" 'waiting'
+printf -- '--- session.sh end 1\n' >>"$TMP/logs/fk.log"; has 'failed exit is interrupted' "$("$S" recover)" 'interrupted fk'
+printf -- '--- session.sh run x ---\nSTATUS: ready\nEVIDENCE: y\n--- session.sh end 0\n' >>"$TMP/logs/fk.log"; hasnt 'clean end is final' "$("$S" recover)" 'interrupted fk'; has 'clean end shows word' "$("$S" status | grep '^fk ')" 'ready'
+printf 'STATUS: ready\n' >"$TMP/logs/lg.log"; printf 'lg\tteam\tsid\t999999\t%s\t%s\tt\t%s\t\n' "$P" "$TMP/logs/lg.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"; has 'legacy log with no markers still reads' "$("$S" status | grep '^lg ')" 'ready'
+"$S" launch team em "$P" >/dev/null; waitfor "$TMP/logs/em.log" 'session.sh end 0'
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
