@@ -1,6 +1,6 @@
 # Sourced by the test files: temp state, a stub CLI, assertions. Nothing here touches real state.
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); H="$ROOT/hooks/scripts"
-TMP=$(mktemp -d /tmp/agent-ops-test.XXXXXX)
+TD=${TMPDIR:-/tmp}; TMP=$(mktemp -d "${TD%/}/agent-ops-test.XXXXXX")  # macOS TMPDIR ends in /; paths are compared as text
 export AGENT_OPS_HOME="$TMP/home"; unset AGENT_OPS_PLUGIN AGENT_OPS_ROLE
 TEAM=team-org-uuid; STUB="$TMP/stub/claude"; A="$TMP/primary"; V="$TMP/work"
 mkdir -p "$TMP/home/state" "$A/backend" "$V/logs" "$V/worktrees/s"
@@ -36,6 +36,11 @@ echo "$TEAM" >"$TMP/profiles/team/org"; echo personal-org >"$TMP/profiles/me/org
 cat >"$STUB" <<'EOF'
 #!/bin/bash
 [ "$1" = auth ] && { printf '{"orgId":"%s"}\n' "$(cat "$CLAUDE_CONFIG_DIR/org")"; exit 0; }
+[ "$1" = --version ] && { echo "9.9.9 (Claude Code)"; exit 0; }
+args=" $* "; if [[ "$args" == *" --plugin-dir "* ]] && [ -z "${STUB_NOHOOK:-}" ]; then  # what the CLI does with a plugin: SessionStart
+  d=${args#* --plugin-dir }; d=${d%% *}; src=startup; [[ "$args" == *" --resume "* ]] && src=resume
+  echo "{\"source\":\"$src\"}" | CLAUDE_PLUGIN_ROOT="$d" "$d/hooks/scripts/session_start.sh"
+fi
 echo "STUB role=[$AGENT_OPS_ROLE] $*"
 echo "STUBPID $$"; echo "STUBCWD $PWD"; echo "npm_cache=[${npm_config_cache:-}]"
 [ -n "${STUB_SLEEP:-}" ] && sleep "$STUB_SLEEP"

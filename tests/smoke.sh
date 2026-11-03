@@ -13,7 +13,7 @@ printf '## Freeze\n- dev: smoke-lock-marker\n## Owners\n' >"$AGENT_OPS_HOME/stat
 pass=0; fail=0; only=("$@")
 run() {  # case role plugin-dir prompt; output in $OUT
   OUT="$SCRATCH/smoke-$1.jsonl"
-  printf '%s\n' "$4" | env -u CLAUDECODE -u AGENT_OPS_ROLE ${2:+AGENT_OPS_ROLE=$2} "$CLI" -p --permission-mode bypassPermissions --plugin-dir "$3" \
+  printf '%s\n' "$4" | env -u CLAUDECODE -u AGENT_OPS_ROLE -u AGENT_OPS_LOG ${2:+AGENT_OPS_ROLE=$2} "$CLI" -p --permission-mode bypassPermissions --plugin-dir "$3" \
     --model claude-sonnet-5-5 --tools Bash --strict-mcp-config --output-format stream-json --verbose --include-hook-events >"$OUT" 2>&1
 }
 want() {  # case python-expression over: e (events), results (tool_result texts), final (result text), hooks (hook event text)

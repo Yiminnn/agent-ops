@@ -56,17 +56,19 @@ expect 'personal refused' "$("$S" launch me w0 "$P" 2>&1 >/dev/null | grep -c 'p
 expect 'no row written' "$(wc -l <"$REG" | tr -d ' ')" 0
 expect 'client-data beats personal-ok' "$("$S" launch me w0 "$P" --client-data --personal-ok 2>&1 | grep -c 'personal org')" 1
 has 'team launch' "$("$S" launch team w1 "$P")" 'launched w1'; waitfor "$TMP/logs/w1.log" 'STUB'
-hasnt 'plugin default off' "$(cat "$TMP/logs/w1.log")" '--plugin-dir'; has 'no role' "$(cat "$TMP/logs/w1.log")" 'role=[]'
+has 'plugin default on' "$(cat "$TMP/logs/w1.log")" "--plugin-dir $ROOT"; has 'role worker by default' "$(cat "$TMP/logs/w1.log")" 'role=[worker]'
+AGENT_OPS_PLUGIN=0 "$S" launch team w0 "$P" >/dev/null; waitfor "$TMP/logs/w0.log" 'STUB'
+hasnt 'AGENT_OPS_PLUGIN=0 off' "$(cat "$TMP/logs/w0.log")" '--plugin-dir'; has 'off: no role' "$(cat "$TMP/logs/w0.log")" 'role=[]'
 has 'personal-ok launch' "$("$S" launch me w2 "$P" --personal-ok)" 'launched w2'; waitfor "$TMP/logs/w2.log" 'STUB'
 expect 'resume personal refused' "$("$S" resume w2 "$P" 2>&1 | grep -c 'personal org')" 1
 has 'resume personal-ok' "$("$S" resume w2 "$P" --personal-ok)" 'resumed w2'
 
-# Plugin behind the variable; resume keeps it
+# Plugin on every path; only an explicit AGENT_OPS_PLUGIN=0 turns it off
 AGENT_OPS_PLUGIN=1 "$S" launch team w3 "$P" >/dev/null; waitfor "$TMP/logs/w3.log" 'STUB'
 has 'plugin on' "$(cat "$TMP/logs/w3.log")" "--plugin-dir $ROOT"; has 'role worker' "$(cat "$TMP/logs/w3.log")" 'role=[worker]'
 "$S" resume w3 "$P" >/dev/null; waitfor "$TMP/logs/w3.log" '--resume'
 has 'resume keeps plugin' "$(grep -e --resume "$TMP/logs/w3.log")" '--plugin-dir'
-"$S" resume w1 "$P" >/dev/null; waitfor "$TMP/logs/w1.log" '--resume'; hasnt 'legacy resume stays off' "$(AGENT_OPS_PLUGIN=1 cat "$TMP/logs/w1.log")" '--plugin-dir'
+"$S" resume w1 "$P" >/dev/null; waitfor "$TMP/logs/w1.log" '--resume'; AGENT_OPS_PLUGIN=0 "$S" resume w0 "$P" >/dev/null; waitfor "$TMP/logs/w0.log" '--resume'; hasnt 'explicit off on resume' "$(cat "$TMP/logs/w0.log")" '--plugin-dir'
 
 # Waiters: the queued form and the old two-argument _run form; a recheck refuses a changed org
 has 'queued' "$("$S" resume w1 "$P" --after 999999)" 'queued w1'; sleep 0.5
@@ -77,7 +79,7 @@ has 'ORG CHANGED' "$("$S" orgcheck)" 'ORG CHANGED team registry=team-org now=oth
 echo "$TEAM" >"$TMP/profiles/team/org"; expect 'org stable' "$("$S" orgcheck)" ""
 
 # recover: contract rows only unless named; a final STATUS or a live pid is left alone; a dead waiter is resumed
-"$S" launch team old "$P" >/dev/null; waitfor "$TMP/logs/old.log" STUB
+AGENT_OPS_PLUGIN=0 "$S" launch team old "$P" >/dev/null; waitfor "$TMP/logs/old.log" STUB
 AGENT_OPS_PLUGIN=1 "$S" launch team cut "$P" >/dev/null; waitfor "$TMP/logs/cut.log" STUB
 AGENT_OPS_PLUGIN=1 STUB_REPORT=ready "$S" launch team fin "$P" >/dev/null; waitfor "$TMP/logs/fin.log" 'STATUS'
 sleep 300 & LIVE=$!; AGENT_OPS_PLUGIN=1 "$S" launch team live "$P" >/dev/null; printf 'live\tteam\tsid\t%s\t%s\t%s\tt\to\tplugin\n' "$LIVE" "$P" "$TMP/logs/live.log" >>"$REG"
@@ -105,9 +107,10 @@ echo "$TEAM" >"$TMP/profiles/team/org"
 printf -- 'STATUS: blocked\n' >>"$TMP/logs/w3.log"; has 'check status' "$(C)" 'SESSION w3 done STATUS:blocked'
 
 # SessionStart
-SS() { AGENT_OPS_ROLE=$1 CLAUDE_PLUGIN_ROOT="$ROOT" "$H/session_start.sh"; }
+SS() { echo "{\"source\":\"${2:-startup}\"}" | AGENT_OPS_ROLE=$1 CLAUDE_PLUGIN_ROOT="$ROOT" "$H/session_start.sh"; }
 touch "$TMP/home/state/handoff-2026-01-01.md"; printf '## Freeze\n- dev: open\n## Deploy lock\n- prod: none\n## Owners\n- x\n' >"$TMP/home/state/coordinator.md"
 expect 'start worker silent' "$(SS worker)" ""; O=$(SS coordinator); has 'start handoff' "$O" 'handoff-2026-01-01.md'; has 'start locks' "$O" '- prod: none'; has 'start status' "$O" 'w3'; hasnt 'start owners' "$O" 'Owners'
+has 'start on resume too' "$(SS coordinator resume)" 'handoff-2026-01-01.md'
 
 # Watchdog
 D="$ROOT/scripts/watchdog.sh"; LAST="$TMP/home/state/heartbeat.last"; AL="$TMP/alerts"; rm -f "$TMP/home/state/watchdog."*

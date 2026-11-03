@@ -15,8 +15,8 @@
 # cannot make a queued resume fail silently. Logs go to $LOGS_DIR/<name>.log.
 # Org: launch and resume refuse a personal org unless --personal-ok. --client-data refuses it always
 # (real client data never goes to a personal account).
-# AGENT_OPS_PLUGIN=1: new launches load this plugin as AGENT_OPS_ROLE=worker, column 9 says so, and
-# resumes of that row keep it. Default off: older rows and unflagged launches run with no plugin.
+# Plugin: launch, resume, recover and a queued resume all load this plugin (absolute path) as AGENT_OPS_ROLE=worker,
+# unless AGENT_OPS_PLUGIN=0. Column 9 records what the last launch did; it does not decide the next one.
 # Sandbox: a launch runs the worker in the Claude Code Bash sandbox (templates/worker-sandbox.json, passed with
 # --settings), with cwd = --worktree. A missing --worktree dir is created here (unsandboxed) as a linked worktree of
 # --repo on a new branch (--branch, default the dir name) from --base. Bash and every child process may write only
@@ -67,7 +67,7 @@ launch)
     [ -d "$dir" ] || die "--worktree $dir is not a directory"
   fi
   kept=$(keep_prompt "$prompt" "$name") || exit 1
-  plug=""; [ "${AGENT_OPS_PLUGIN:-0}" = 1 ] && plug=plugin
+  plug=$(policy)
   sid=$(uuidgen | tr 'A-Z' 'a-z'); log="$LOGS/$name.log"
   [ "$client" = 1 ] && { : >"$(client_mark "$sid")" || die "cannot write the client-data marker"; }
   pid=$(run_claude "$profile" "$sid" new "$kept" "$log" "$plug" "$dir" "$wr") || exit 1
@@ -78,7 +78,7 @@ resume)
   [ $# -ge 2 ] || die "usage: resume <name> <prompt-file> [--after <pid>] [--personal-ok]"
   name=$1 prompt=$2
   r=$(row "$name"); [ -n "$r" ] || die "no session $name in registry"
-  profile=$(field "$r" 2) sid=$(field "$r" 3) log=$(field "$r" 6) plug=$(field "$r" 9) dir=$(field "$r" 10) wr=$(field "$r" 11)
+  profile=$(field "$r" 2) sid=$(field "$r" 3) log=$(field "$r" 6) plug=$(policy) dir=$(field "$r" 10) wr=$(field "$r" 11)
   if [ -n "$wt" ]; then dir=$(path_ok "$name" worktree "$wt") || exit 1; [ -d "$dir" ] || die "--worktree $dir is not a directory"; fi
   [ -z "$dir" ] && [ ${#writes[@]} -gt 0 ] && die "--write needs a sandboxed row; add --worktree"
   add_writes "$name"
@@ -86,6 +86,9 @@ resume)
   [ -e "$(client_mark "$sid")" ] && personal_ok=0
   need_org "$profile" "$personal_ok"
   kept=$(keep_prompt "$prompt" "$name") || exit 1
+  if [ -z "$(field "$r" 9)" ] && [ -n "$plug" ]; then  # first run with the plugin: an old conversation follows old rules
+    { printf '%s\n\n' "$LOAD_WORKER"; cat "$prompt"; } >"$kept" || die "cannot write $kept"
+  fi
   live=$(field "$r" 4)
   if [[ "$live" == waiting:* ]] && ! alive "$live"; then  # the waiter died; its worker may not have
     live=$(awk -F'\t' -v n="$name" '$1==n && $4 !~ /^waiting:/ {p=$4} END {print p}' "$REG")
@@ -112,8 +115,9 @@ _run)  # internal: the waiter's hand-off once the blocking pid exits. No third a
   if { [ "${3:-}" = check ] || [ -e "$(client_mark "$(field "$r" 3)")" ]; } && [ "$(org_of "$(field "$r" 2)")" != "$TEAM_ORG" ]; then
     echo "session.sh: queued resume refused: profile $(field "$r" 2) is no longer the team org" >>"$log"; exit 1
   fi
-  pid=$(run_claude "$(field "$r" 2)" "$(field "$r" 3)" resume "$kept" "$log" "$(field "$r" 9)" "$(field "$r" 10)" "$(field "$r" 11)") || exit 1
-  add_row "$name" "$(field "$r" 2)" "$(field "$r" 3)" "$pid" "$kept" "$log" "$(field "$r" 8)" "$(field "$r" 9)" "$(field "$r" 10)" "$(field "$r" 11)"
+  plug=$(policy)
+  pid=$(run_claude "$(field "$r" 2)" "$(field "$r" 3)" resume "$kept" "$log" "$plug" "$(field "$r" 10)" "$(field "$r" 11)") || exit 1
+  add_row "$name" "$(field "$r" 2)" "$(field "$r" 3)" "$pid" "$kept" "$log" "$(field "$r" 8)" "$plug" "$(field "$r" 10)" "$(field "$r" 11)"
   # Stay alive for the whole turn: a later resume may be queued behind this waiter's pid, and must not start early.
   while kill -0 "$pid" 2>/dev/null; do sleep 30; done
   ;;
@@ -133,7 +137,7 @@ recover)
     fi
     echo "interrupted $name profile=$profile sid=${sid:0:8}"
     if [ "$go" = 1 ]; then
-      tmp=$(mktemp); printf '%s\n' "$note" >"$tmp"
+      tmp=$(mktemp "${TMPDIR:-/tmp}/agent-ops-recover.XXXXXX"); printf '%s\n' "$note" >"$tmp"
       ok=(); [ "$personal_ok" = 1 ] && ok=(--personal-ok)
       "$0" resume "$name" "$tmp" ${ok[@]+"${ok[@]}"} || rc=1; rm -f "$tmp"
     fi
@@ -147,7 +151,7 @@ status)
     age=$( [ -f "$log" ] && echo "$(( ($(date +%s) - $(stat -f %m "$log")) / 60 ))m" || echo "nolog")
     team=$([ "$org" = "$TEAM_ORG" ] && echo team || echo PERSONAL)
     st=""; [ "$state" = done ] && [[ "$pid" != waiting:* ]] && st=$(final_status "$log")
-    printf '%-28s %-8s %-5s %-8s %-8s log %-6s %s %s\n' "$name" "$state" "$profile" "$team" "$p" "$age" "${sid:0:8}" "$st"
+    printf '%-28s %-8s %-5s %-8s %-8s log %-6s %s %s %s\n' "$name" "$state" "$profile" "$team" "$p" "$age" "${sid:0:8}" "$st" "$(plugin_unseen "$log")"
   done
   ;;
 orgcheck)  # stable text: check.sh diffs these lines between ticks

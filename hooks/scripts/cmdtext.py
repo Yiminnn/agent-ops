@@ -2,7 +2,8 @@
 
 It reads text only. What a script or a Python child does after it starts is invisible here.
 Quotes are not kept, so `echo 'pkill -f x'` under `bash -c` or in a heredoc can match: a false deny costs
-a retry through the Write tool, a miss costs another session's work.
+a retry through the Write tool, a miss costs another session's work. Heredocs are not parsed on purpose: a text hook
+catches accidents, it is not a shell parser, and each heredoc rule tried let real commands through (PR #4, round 1).
 """
 import json
 import os
@@ -15,6 +16,7 @@ KEYWORDS = {"if", "then", "elif", "else", "while", "until", "do", "!", "{", "tim
 WRAPPERS = {"sudo", "env", "nohup", "command", "exec", "nice", "caffeinate", "xargs", "timeout", "gtimeout", "builtin"}
 SHELLS = {"sh", "bash", "zsh", "dash"}
 HOME = os.path.expanduser("~")
+TEXT = " If these words are only text (a prompt, a PR body, a heredoc), write it with the Write tool and pass the file (--body-file, -F)."
 
 
 def config(key):
@@ -124,4 +126,4 @@ def run(rule):
     command = (data.get("tool_input") or {}).get("command") or ""
     reason = rule(command, data.get("cwd") or os.getcwd())
     if reason:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}))
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason + TEXT}}))

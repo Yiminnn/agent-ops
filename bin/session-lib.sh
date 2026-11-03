@@ -8,6 +8,7 @@ LOGS="$LOGS_DIR"
 PROFILES="$PROFILES_DIR"
 PLUGIN_DIR=$(cd "$(dirname "$0")/.." && pwd)
 RECOVERY="Your previous turn was cut off by a restart. Before you repeat anything, check the worktree (git status, uncommitted work), git log on your branch, and the PR with its comments. Do not repeat an outside action (push, comment, merge, Linear, Slack) that already happened. Then continue the task and end with your STATUS report."
+LOAD_WORKER="This session now runs with the current agent-ops plugin: load the agent-ops:worker skill first, follow the rules it names, and end with its report contract."
 mkdir -p "$PROMPTS" "$(dirname "$REG")"
 touch "$REG"
 
@@ -20,6 +21,7 @@ need_org() {  # profile personal_ok; sets org
   [ "$org" = "$TEAM_ORG" ] || [ "$2" = 1 ] || die "profile $1 is personal org $org; use a team profile, or pass --personal-ok if this work holds no client data"
 }
 client_mark() { echo "$T/state/client-$1"; }  # holds no data: says this sid may not leave the team org
+policy() { [ "${AGENT_OPS_PLUGIN:-1}" = 0 ] || echo plugin; }  # every launch path: the plugin, unless turned off explicitly
 row() { awk -F'\t' -v n="$1" '$1==n' "$REG" | tail -1; }
 field() { cut -f"$2" <<<"$1"; }
 add_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$(date -u +%FT%TZ)" "$7" "${8:-}" "${9:-}" "${10:-}" >>"$REG"; }
@@ -57,6 +59,12 @@ final_status() {  # the last STATUS word of the last run, if that run ended with
   [ -f "$1" ] || return 0
   awk '/^--- session.sh run /{s=""; m=1; e=""} /^--- session.sh end /{e=$4} $1=="STATUS:" && $2 ~ /^(ready|waiting|blocked|failed)$/{s=$2} END{if (m && e!="0") s=""; print s}' "$1"
 }
+plugin_unseen() {  # the last run asked for the plugin, and no SessionStart line came before it ended or within 2 minutes
+  [ -f "$1" ] || return 0
+  local old; old=$(python3 -c 'import datetime as d; print((d.datetime.now(d.timezone.utc) - d.timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ"))')  # BSD and GNU date differ
+  awk -v old="$old" '/^--- session.sh run /{p=/ plugin=/ && !/ plugin=off /; t=$4; seen=0; e=0}
+    /^--- agent-ops plugin loaded /{seen=1} /^--- session.sh end /{e=1} END{if (p && !seen && (e || t<old)) print "plugin-not-loaded"}' "$1"
+}
 keep_prompt() {  # copy the prompt next to the registry; print the kept path
   [ -s "$1" ] || die "prompt file missing or empty: $1"
   local dst; dst=$(mktemp "$PROMPTS/$2-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX") || die "cannot create a prompt file"
@@ -79,14 +87,14 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin] [sandbox dir]
   [ -d "$LOGS" ] || die "no $LOGS: is the work drive mounted? Create it only after you check the drive"
   local B; B=$(cli); [ -x "$B" ] || die "no bundled claude CLI found"
   local flag=(--session-id "$2") role="" dir=${7:-} set env=(); [ "$3" = resume ] && flag=(--resume "$2")
-  [ "${6:-}" = plugin ] && { flag+=(--plugin-dir "$PLUGIN_DIR"); role=worker; }
+  local rev=off; [ "${6:-}" = plugin ] && { flag+=(--plugin-dir "$PLUGIN_DIR"); role=worker; rev=$(git -C "$PLUGIN_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown); }
   if [ -n "$dir" ]; then  # Bash and its children may write only here, the --write paths and temp
     set=$(sandbox_settings "$2" "$dir" "${8:-}") || die "cannot write the sandbox settings"; flag+=(--settings "$set")
     env=(npm_config_cache="$SANDBOX_TMP/npm-cache" PIP_CACHE_DIR="$SANDBOX_TMP/pip-cache")
   else dir=$PRIMARY_CHECKOUT; fi  # --no-sandbox, or a row from before the sandbox
   cd "$dir" || die "no $dir"
-  echo "--- session.sh run $(date -u +%FT%TZ) ---" >>"$5" || die "cannot write $5"
-  env ${env[@]+"${env[@]}"} AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
+  echo "--- session.sh run $(date -u +%FT%TZ) plugin=$rev cli=$("$B" --version 2>/dev/null | cut -d' ' -f1) ---" >>"$5" || die "cannot write $5"
+  env ${env[@]+"${env[@]}"} AGENT_OPS_LOG="$5" AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
     nohup python3 -c "$SETSID" bash -c 'trap "trap - TERM; kill -TERM -- -$$" TERM; "$@" & c=$!; wait "$c"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &
   echo $!

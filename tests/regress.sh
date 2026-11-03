@@ -209,6 +209,61 @@ O=$(SSOP none); has 'both pass: ok' "$O" 'SSO ok'; hasnt 'both pass: not expired
 O=$(SSOP dev-prof); has 'second fails: expired' "$O" 'SSO EXPIRED'; hasnt 'second fails: not ok' "$O" 'SSO ok'
 O=$(SSOP prod-prof); has 'first fails: expired' "$O" 'SSO EXPIRED'; hasnt 'first fails: not ok' "$O" 'SSO ok'
 
+# Resume policy: a legacy row (no plugin column) resumes with the plugin; column 9 records the launch, it does not decide it
+printf 'leg\tteam\tsidleg\t999999\t%s\t%s\tt\t%s\n' "$P" "$TMP/logs/leg.log" "$TEAM" >>"$REG"
+"$S" resume leg "$P" >/dev/null; waitfor "$TMP/logs/leg.log" '--resume'
+has 'legacy resume loads plugin' "$(grep -e --resume "$TMP/logs/leg.log")" "--plugin-dir $ROOT"
+has 'legacy resume is a worker' "$(grep -e --resume "$TMP/logs/leg.log")" 'role=[worker]'
+expect 'legacy resume records plugin' "$(awk -F'\t' '$1=="leg"' "$REG" | tail -1 | cut -f9)" plugin
+has 'legacy resume told to load the worker skill' "$(grep -e --resume "$TMP/logs/leg.log")" 'agent-ops:worker'
+"$S" resume leg "$P" >/dev/null; waitfor "$TMP/logs/leg.log" 'source=resume'
+expect 'plugin row not told again' "$(grep -c 'agent-ops:worker' "$TMP/logs/leg.log")" 1
+
+printf 'lq\tteam\tsidlq\twaiting:999999\t%s\t%s\tt\t%s\n' "$P" "$TMP/logs/lq.log" "$TEAM" >>"$REG"  # queued by an older session.sh
+"$S" _run lq "$P" check; waitfor "$TMP/logs/lq.log" '--resume'
+has 'old queued resume loads plugin' "$(grep -e --resume "$TMP/logs/lq.log")" "--plugin-dir $ROOT"
+printf 'lr\tteam\tsidlr\t999999\t%s\t%s\tt\t%s\n' "$P" "$TMP/logs/lr.log" "$TEAM" >>"$REG"; echo old-run >"$TMP/logs/lr.log"
+"$S" recover --go lr >/dev/null; waitfor "$TMP/logs/lr.log" '--resume'
+has 'recovered legacy loads plugin' "$(grep -e --resume "$TMP/logs/lr.log")" "--plugin-dir $ROOT"
+has 'recovered legacy told to load the worker skill' "$(grep -e --resume "$TMP/logs/lr.log")" 'agent-ops:worker'
+
+# Heredoc text stays matched (light harness: text hooks catch accidents, they do not parse shell). The PR #4 round-1
+# bypass shapes stay denied; the deny message names the way out for text: the Write tool or --body-file
+M=deny_merge_git.py; K=deny_kill.py; NL=$'\n'
+deny $K "cat <<EOF${NL}\$(pkill -f \"\$(printf w)\")${NL}EOF"
+deny $M "cat <<EOF${NL}\$(cd /tmp)${NL}EOF${NL}git push origin main" "$A"
+deny $M "grep -n '<<EOF' notes.sh${NL}git push origin main${NL}cat <<EOF >f${NL}hello${NL}EOF" "$A"
+deny $M "true # <<EOF${NL}git push origin main${NL}cat <<EOF >f${NL}hello${NL}EOF" "$A"
+deny $M "echo \$((1<<EOF))${NL}git push origin main${NL}cat <<EOF >f${NL}hello${NL}EOF" "$A"
+deny $K "cat <<'EOF' |${NL}pkill -f worker${NL}EOF${NL}sh"
+deny $M "cat >/tmp/p.md <<'EOF'${NL}then git push origin x${NL}EOF" "$A"
+has 'deny names the text workaround' "$(hook $M "cat >/tmp/p.md <<'EOF'${NL}git push origin x${NL}EOF" "$A")" '--body-file'
+has 'deny-kill names it too' "$(hook $K 'pkill -f x')" 'Write tool'
+has 'deny-rm names it too' "$(hook deny_wide_rm.py 'rm -rf /')" 'Write tool'
+
+# Proof the plugin loaded: the run header names the plugin revision and CLI version; SessionStart, on startup and on
+# resume, writes a line to the log; a plugin run with no such line shows in status and check.sh
+REV=$(git -C "$ROOT" rev-parse --short HEAD)
+"$S" launch team pl1 "$P" >/dev/null; waitfor "$TMP/logs/pl1.log" 'session.sh end'
+has 'header rev' "$(grep 'session.sh run' "$TMP/logs/pl1.log")" "plugin=$REV cli=9.9.9"
+has 'loaded on startup' "$(cat "$TMP/logs/pl1.log")" "agent-ops plugin loaded rev=$REV source=startup"
+"$S" resume pl1 "$P" >/dev/null; waitfor "$TMP/logs/pl1.log" 'source=resume'
+AGENT_OPS_PLUGIN=0 "$S" launch team pl0 "$P" >/dev/null; waitfor "$TMP/logs/pl0.log" 'session.sh end'
+has 'header off' "$(cat "$TMP/logs/pl0.log")" 'plugin=off'; hasnt 'no loaded line off' "$(cat "$TMP/logs/pl0.log")" 'plugin loaded'
+STUB_NOHOOK=1 "$S" launch team pl2 "$P" >/dev/null; waitfor "$TMP/logs/pl2.log" 'session.sh end'
+has 'status flags missing plugin' "$("$S" status | grep '^pl2 ')" 'plugin-not-loaded'
+hasnt 'status quiet when loaded' "$("$S" status | grep '^pl1 ')" 'plugin-not-loaded'
+hasnt 'status quiet when off' "$("$S" status | grep '^pl0 ')" 'plugin-not-loaded'
+sleep 300 & PLIVE=$!
+printf -- '--- session.sh run 2020-01-01T00:00:00Z plugin=abc cli=x ---\n' >"$TMP/logs/pl3.log"; printf 'pl3\tteam\tsid3\t%s\t%s\t%s\tt\t%s\tplugin\n' "$PLIVE" "$P" "$TMP/logs/pl3.log" "$TEAM" >>"$REG"
+printf -- '--- session.sh run %s plugin=abc cli=x ---\n' "$(date -u +%FT%TZ)" >"$TMP/logs/pl4.log"; printf 'pl4\tteam\tsid4\t%s\t%s\t%s\tt\t%s\tplugin\n' "$PLIVE" "$P" "$TMP/logs/pl4.log" "$TEAM" >>"$REG"
+has 'live run past grace flagged' "$("$S" status | grep '^pl3 ')" 'plugin-not-loaded'
+hasnt 'live run in grace quiet' "$("$S" status | grep '^pl4 ')" 'plugin-not-loaded'
+mkdir -p "$TMP/gnu"; printf '#!/bin/bash\nfor a; do [[ "$a" == -v* ]] && { echo "date: invalid option -- v" >&2; exit 1; }; done\nexec /bin/date "$@"\n' >"$TMP/gnu/date"; chmod +x "$TMP/gnu/date"
+has 'grace check without BSD date -v' "$(PATH="$TMP/gnu:$PATH" "$S" status | grep '^pl3 ')" 'plugin-not-loaded'
+O=$(CK); has 'check shows it' "$O" 'SESSION pl2 done PLUGIN NOT LOADED'; hasnt 'check no fake STATUS' "$O" 'STATUS:plugin'
+kill "$PLIVE" 2>/dev/null
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
