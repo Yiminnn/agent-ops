@@ -96,6 +96,12 @@ echo '{"state":"OPEN","mergeCommit":null}' >"$TMP/view.json"; O=$(MG ok); expect
 O=$(MG fail); expect 'failed view is not merged' "$?" 2; hasnt 'no merged line 2' "$O" 'merged '
 echo '{"state":"MERGED","mergeCommit":{"oid":"deadbeef1234"}}' >"$TMP/view.json"; O=$(MG ok); expect 'merged exits 0' "$?" 0; has 'merged line' "$O" 'merged deadbeef1'
 
+# Round 2, item 1: the registered pid stands for the whole worker
+STUB_SLEEP=30 "$S" launch team tm "$P" >/dev/null; waitfor "$TMP/logs/tm.log" STUBPID
+TP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); CP=$(awk '/^STUBPID/{print $2}' "$TMP/logs/tm.log"); kill -TERM "$TP"; sleep 1
+expect 'worker gone with its wrapper' "$(kill -0 "$CP" 2>/dev/null && echo alive || echo gone)" gone; hasnt 'no clean end' "$(cat "$TMP/logs/tm.log")" 'session.sh end 0'
+STUB_EXIT=7 "$S" launch team ex7 "$P" >/dev/null; waitfor "$TMP/logs/ex7.log" 'session.sh end 7'
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

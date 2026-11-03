@@ -36,9 +36,10 @@ cat >"$STUB" <<'EOF'
 #!/bin/bash
 [ "$1" = auth ] && { printf '{"orgId":"%s"}\n' "$(cat "$CLAUDE_CONFIG_DIR/org")"; exit 0; }
 echo "STUB role=[$AGENT_OPS_ROLE] $*"
+echo "STUBPID $$"
 [ -n "${STUB_SLEEP:-}" ] && sleep "$STUB_SLEEP"
 [ -n "${STUB_REPORT:-}" ] && echo "STATUS: $STUB_REPORT"
-exit 0
+exit "${STUB_EXIT:-0}"
 EOF
 chmod +x "$STUB"; S="$ROOT/bin/session.sh"; REG="$TMP/home/state/sessions.tsv"; P="$TMP/p.md"; echo do-work >"$P"
 waitfor() { local i=0; until grep -q -- "$2" "$1" 2>/dev/null; do i=$((i+1)); [ $i -gt 50 ] && { bad "timeout waiting for $2 in $1"; return; }; sleep 0.1; done; ok; }
