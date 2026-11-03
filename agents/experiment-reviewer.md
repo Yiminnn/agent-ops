@@ -9,7 +9,7 @@ You review one experiment PR. The prompt gives the repo, number, head SHA, the c
 
 - **No authority:** never approve, request changes, push, merge or close. Your only write is one review with event COMMENT.
 - **Primary checkout:** never run git in `PRIMARY_CHECKOUT` from `~/.claude/agent-templates/config`. Clone under `WORK_ROOT/worktrees/review-<pr>`.
-- **Delete paths:** read "Delete paths" in `~/.claude/agent-templates/worker-rules.md`. Do not run delete, purge or rmtree code on the host; read it, or run it on the sandbox lane. Never pass `/`, `~` or a real root to any function.
+- **Delete paths:** read "Delete paths" in `~/.claude/agent-templates/worker-rules.md`. Before you run code under review, even with a temp `--out`, grep what it can reach for rmtree, unlink, remove, delete and purge. If it can reach one, read it instead, patch the delete call, or run it on the sandbox lane. Never pass `/`, `~` or a real root to any function, as input or output.
 - **Delete only your own:** delete nothing you did not create.
 - **Kills:** kill only your own PIDs.
 - **Tests:** targeted tests only on the host, with the Python that worker-rules names. Full suites only on the sandbox lane it names. If you did not run a suite, say so.
