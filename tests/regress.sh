@@ -23,6 +23,16 @@ expect 'second refused' "$("$S" resume q1 "$P" 2>&1 | grep -c 'already has a que
 expect 'no third row' "$(grep -c '^q1	' "$TMP/home/state/sessions.tsv")" 2
 for p in $(awk -F'\t' '$1=="q1"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
 
+# Round 1, item 4: cd in a child shell or subshell stays there
+deny deny_merge_git.py "bash -c 'cd /tmp'; git reset --hard" "$A"
+deny deny_merge_git.py "(cd /tmp); git reset --hard" "$A"
+deny deny_merge_git.py 'x=$(cd /tmp); git reset --hard' "$A"
+deny deny_wide_rm.py "bash -c 'cd /tmp'; rm -rf logs" "$V"
+deny deny_wide_rm.py "(cd /tmp); rm -rf logs" "$V"
+deny deny_merge_git.py "(cd $A && git reset --hard)" /tmp
+allow deny_merge_git.py "(cd /tmp && git status); git log" "$A"
+allow deny_wide_rm.py "(cd /tmp && rm -rf logs)" "$V"
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

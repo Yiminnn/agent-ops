@@ -47,6 +47,9 @@ def _simple(text):
             if cur:
                 yield cur
             cur = []
+            for c in t:
+                if c in "()":
+                    yield [c]
         else:
             cur.append(t)
 
@@ -75,12 +78,21 @@ def walk(text, cwd):
     state = [cwd]
 
     def visit(chunk, depth):
+        subshells = []
         for raw in _simple(chunk):
+            if raw == ["("]:
+                subshells.append(state[0])
+                continue
+            if raw == [")"]:
+                state[0] = subshells.pop() if subshells else state[0]
+                continue
             argv = _strip(raw)
+            outer = state[0]
             if depth < 5:
                 for word in raw:
                     for inner in re.findall(r"\$\(([^()]*)\)|`([^`]*)`", word):
                         yield from visit(inner[0] or inner[1], depth + 1)
+                        state[0] = outer
             if not argv:
                 continue
             base, args = os.path.basename(argv[0]), argv[1:]
@@ -92,6 +104,7 @@ def walk(text, cwd):
                 flags = [i for i, a in enumerate(args) if re.fullmatch(r"-[a-z]*c", a)]
                 if flags and flags[0] + 1 < len(args):
                     yield from visit(args[flags[0] + 1], depth + 1)
+                    state[0] = outer
             yield [base] + args, state[0]
 
     return visit(text, 0)
