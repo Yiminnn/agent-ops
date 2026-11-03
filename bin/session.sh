@@ -44,7 +44,7 @@ launch)
   plug=""; [ "${AGENT_OPS_PLUGIN:-0}" = 1 ] && plug=plugin
   sid=$(uuidgen | tr 'A-Z' 'a-z'); log="$LOGS/$name.log"
   [ "$client" = 1 ] && { : >"$(client_mark "$sid")" || die "cannot write the client-data marker"; }
-  pid=$(run_claude "$profile" "$sid" new "$kept" "$log" "$plug")
+  pid=$(run_claude "$profile" "$sid" new "$kept" "$log" "$plug") || exit 1
   add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug"
   echo "launched $name pid=$pid sid=$sid profile=$profile log=$log"
   ;;
@@ -68,7 +68,7 @@ resume)
     add_row "$name" "$profile" "$sid" "waiting:$!" "$kept" "$log" "$org" "$plug"
     echo "queued $name after pid $after (waiter $!)"
   else
-    pid=$(run_claude "$profile" "$sid" resume "$kept" "$log" "$plug")
+    pid=$(run_claude "$profile" "$sid" resume "$kept" "$log" "$plug") || exit 1
     add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug"
     echo "resumed $name pid=$pid"
   fi
@@ -79,7 +79,7 @@ _run)  # internal: the waiter's hand-off once the blocking pid exits. No third a
   if { [ "${3:-}" = check ] || [ -e "$(client_mark "$(field "$r" 3)")" ]; } && [ "$(org_of "$(field "$r" 2)")" != "$TEAM_ORG" ]; then
     echo "session.sh: queued resume refused: profile $(field "$r" 2) is no longer the team org" >>"$log"; exit 1
   fi
-  pid=$(run_claude "$(field "$r" 2)" "$(field "$r" 3)" resume "$kept" "$log" "$(field "$r" 9)")
+  pid=$(run_claude "$(field "$r" 2)" "$(field "$r" 3)" resume "$kept" "$log" "$(field "$r" 9)") || exit 1
   add_row "$name" "$(field "$r" 2)" "$(field "$r" 3)" "$pid" "$kept" "$log" "$(field "$r" 8)" "$(field "$r" 9)"
   # Stay alive for the whole turn: a later resume may be queued behind this waiter's pid, and must not start early.
   while kill -0 "$pid" 2>/dev/null; do sleep 30; done
@@ -87,7 +87,7 @@ _run)  # internal: the waiter's hand-off once the blocking pid exits. No third a
 recover)
   # Rows from before the report contract (no plugin column) never print STATUS, so "no STATUS" means nothing
   # for them: they resume only when named. A dead waiter's prompt never ran, whatever the log says.
-  latest | while IFS=$'\t' read -r name profile sid pid prompt log started org plug; do
+  latest | { rc=0; while IFS=$'\t' read -r name profile sid pid prompt log started org plug; do
     alive "$pid" && continue
     note=$RECOVERY
     if [[ "$pid" == waiting:* ]]; then note="$RECOVERY A queued instruction never ran; read and do it after these checks: $prompt"
@@ -102,9 +102,9 @@ recover)
     if [ "$go" = 1 ]; then
       tmp=$(mktemp); printf '%s\n' "$note" >"$tmp"
       ok=(); [ "$personal_ok" = 1 ] && ok=(--personal-ok)
-      "$0" resume "$name" "$tmp" ${ok[@]+"${ok[@]}"}; rm -f "$tmp"
+      "$0" resume "$name" "$tmp" ${ok[@]+"${ok[@]}"} || rc=1; rm -f "$tmp"
     fi
-  done
+  done; exit "$rc"; }
   ;;
 status)
   latest | while IFS=$'\t' read -r name profile sid pid prompt log started org plug; do

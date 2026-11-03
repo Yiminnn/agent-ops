@@ -49,6 +49,14 @@ expect 'launch refuses' "$("$S" launch team nolog "$P" 2>&1 | grep -c 'work driv
 expect 'dir still gone' "$([ -d "$TMP/logs" ] && echo there || echo gone)" gone
 mv "$TMP/logs.away" "$TMP/logs"; rm -f "$TMP/home/state/heartbeat.last"
 
+# Round 1, item 8: a launch that cannot start says so
+mv "$A" "$A.away"; O=$("$S" launch team badcwd "$P" 2>&1); RC=$?; mv "$A.away" "$A"
+expect 'launch fails' "$RC" 1; hasnt 'no launched line' "$O" 'launched'; expect 'no row' "$(grep -c '^badcwd	' "$TMP/home/state/sessions.tsv")" 0
+"$S" launch team bres "$P" >/dev/null; waitfor "$TMP/logs/bres.log" STUB
+mv "$A" "$A.away"; O=$("$S" resume bres "$P" 2>&1); RC=$?; mv "$A.away" "$A"
+expect 'resume fails' "$RC" 1; hasnt 'no resumed line' "$O" 'resumed'
+echo personal-org >"$TMP/profiles/team/org"; "$S" recover --go bres >/dev/null 2>&1; expect 'recover passes the failure on' "$?" 1; echo "$TEAM" >"$TMP/profiles/team/org"
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

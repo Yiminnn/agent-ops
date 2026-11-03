@@ -39,7 +39,7 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin]
   local flag=(--session-id "$2") role=""; [ "$3" = resume ] && flag=(--resume "$2")
   [ "${6:-}" = plugin ] && { flag+=(--plugin-dir "$PLUGIN_DIR"); role=worker; }
   cd "$PRIMARY_CHECKOUT" || die "no $PRIMARY_CHECKOUT"
-  echo "--- session.sh run $(date -u +%FT%TZ) ---" >>"$5"
+  echo "--- session.sh run $(date -u +%FT%TZ) ---" >>"$5" || die "cannot write $5"
   AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
     nohup "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &
