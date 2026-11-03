@@ -16,6 +16,13 @@ expect 'resume can add the mark' "$("$S" resume cd2 "$P" --client-data --persona
 has 'unmarked personal still works' "$("$S" resume nc1 "$P" --personal-ok)" 'resumed nc1'
 echo "$TEAM" >"$TMP/profiles/team/org"
 
+# Round 1, item 3: one queued resume per session; a later one is refused, not lost
+STUB_SLEEP=20 "$S" launch team q1 "$P" >/dev/null; waitfor "$TMP/logs/q1.log" STUB
+has 'first queued' "$("$S" resume q1 "$P")" 'queued q1'
+expect 'second refused' "$("$S" resume q1 "$P" 2>&1 | grep -c 'already has a queued resume')" 1
+expect 'no third row' "$(grep -c '^q1	' "$TMP/home/state/sessions.tsv")" 2
+for p in $(awk -F'\t' '$1=="q1"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

@@ -57,6 +57,7 @@ resume)
   need_org "$profile" "$personal_ok"
   kept=$(keep_prompt "$prompt" "$name") || exit 1
   live=$(field "$r" 4)
+  [[ "$live" == waiting:* ]] && alive "$live" && die "$name already has a queued resume (waiter ${live#waiting:}); wait for it to start, or add this to its prompt"
   if [ -z "$after" ] && alive "$live"; then after=${live#waiting:}; fi  # never run two turns at once
   if [ -n "$after" ]; then
     # Detached waiter; the prompt is already on the internal disk, so a wiped external drive cannot drop it.
