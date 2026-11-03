@@ -30,7 +30,7 @@ final_status() {  # the last STATUS word since the last run marker, or nothing
 }
 keep_prompt() {  # copy the prompt next to the registry; print the kept path
   [ -s "$1" ] || die "prompt file missing or empty: $1"
-  local dst="$PROMPTS/$2-$(date -u +%Y%m%dT%H%M%SZ).md"
+  local dst; dst=$(mktemp "$PROMPTS/$2-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX") || die "cannot create a prompt file"
   cp "$1" "$dst" && echo "$dst"
 }
 run_claude() {  # profile sid mode(new|resume) prompt log [plugin]

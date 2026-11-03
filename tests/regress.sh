@@ -33,6 +33,13 @@ deny deny_merge_git.py "(cd $A && git reset --hard)" /tmp
 allow deny_merge_git.py "(cd /tmp && git status); git log" "$A"
 allow deny_wide_rm.py "(cd /tmp && rm -rf logs)" "$V"
 
+# Round 1, item 5: same-second prompts keep their own files
+mkdir -p "$TMP/fixed"; printf '#!/bin/bash\necho 20260101T000000Z\n' >"$TMP/fixed/date"; chmod +x "$TMP/fixed/date"
+echo first >"$TMP/p1.md"; echo second >"$TMP/p2.md"; "$S" launch team kp "$P" >/dev/null; waitfor "$TMP/logs/kp.log" STUB
+PATH="$TMP/fixed:$PATH" "$S" resume kp "$TMP/p1.md" >/dev/null; K1=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f5); sleep 0.3
+PATH="$TMP/fixed:$PATH" "$S" resume kp "$TMP/p2.md" >/dev/null; K2=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f5)
+expect 'first prompt kept' "$(cat "$K1")" first; expect 'second prompt kept' "$(cat "$K2")" second
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
