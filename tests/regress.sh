@@ -118,6 +118,13 @@ printf -- '--- session.sh run x ---\nSTATUS: ready\nEVIDENCE: y\n--- session.sh 
 hasnt 'dead waiter shows no old word' "$("$S" status | grep '^dq ')" 'ready'
 touch -t 202001010000 "$TMP/logs/dq.log"; has 'old log does not hide it' "$("$S" status)" 'dq '
 
+# Round 2, item 4: a long run keeps its run marker in view
+lg() { { echo '--- session.sh run x ---'; python3 -c 'print("x"*70000)'; printf 'STATUS: ready\nEVIDENCE: y\n'; printf -- "$1"; } >"$TMP/logs/ln.log"; }
+printf 'ln\tteam\tsid\t999999\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/ln.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"
+lg ''; has 'long, no end: interrupted' "$("$S" recover)" 'interrupted ln'
+lg '--- session.sh end 1\n'; has 'long, end 1: interrupted' "$("$S" recover)" 'interrupted ln'
+lg '--- session.sh end 0\n'; has 'long, end 0: final' "$("$S" status | grep '^ln ')" 'ready'
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

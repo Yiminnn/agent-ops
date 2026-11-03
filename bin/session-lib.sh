@@ -26,7 +26,7 @@ latest() { awk -F'\t' '{last[$1]=$0; order[$1]=NR} END {for (n in last) print or
 alive() { local p=${1#waiting:}; [[ "$p" =~ ^[1-9][0-9]*$ ]] && kill -0 "$p" 2>/dev/null; }
 final_status() {  # the last STATUS word of the last run, if that run ended with exit 0; a log with no markers predates them
   [ -f "$1" ] || return 0
-  tail -c 65536 "$1" | awk '/^--- session.sh run /{s=""; m=1; e=""} /^--- session.sh end /{e=$4} $1=="STATUS:" && $2 ~ /^(ready|waiting|blocked|failed)$/{s=$2} END{if (m && e!="0") s=""; print s}'
+  awk '/^--- session.sh run /{s=""; m=1; e=""} /^--- session.sh end /{e=$4} $1=="STATUS:" && $2 ~ /^(ready|waiting|blocked|failed)$/{s=$2} END{if (m && e!="0") s=""; print s}' "$1"
 }
 keep_prompt() {  # copy the prompt next to the registry; print the kept path
   [ -s "$1" ] || die "prompt file missing or empty: $1"
