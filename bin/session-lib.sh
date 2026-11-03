@@ -41,7 +41,7 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin]
   cd "$PRIMARY_CHECKOUT" || die "no $PRIMARY_CHECKOUT"
   echo "--- session.sh run $(date -u +%FT%TZ) ---" >>"$5" || die "cannot write $5"
   AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
-    nohup bash -c '"$@"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
+    nohup python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' bash -c '"$@"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &
   echo $!
 }

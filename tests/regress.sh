@@ -66,6 +66,12 @@ printf -- '--- session.sh run x ---\nSTATUS: ready\nEVIDENCE: y\n--- session.sh 
 printf 'STATUS: ready\n' >"$TMP/logs/lg.log"; printf 'lg\tteam\tsid\t999999\t%s\t%s\tt\t%s\t\n' "$P" "$TMP/logs/lg.log" "$TEAM" >>"$TMP/home/state/sessions.tsv"; has 'legacy log with no markers still reads' "$("$S" status | grep '^lg ')" 'ready'
 "$S" launch team em "$P" >/dev/null; waitfor "$TMP/logs/em.log" 'session.sh end 0'
 
+# Failure 4: the worker leaves the launcher's process group
+STUB_SLEEP=8 "$S" launch team det "$P" >/dev/null; waitfor "$TMP/logs/det.log" STUB
+DP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); DG=$(ps -o pgid= -p "$DP" | tr -d ' ')
+expect 'worker leads its own group' "$DG" "$DP"
+kill -- "-$DP" 2>/dev/null
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
