@@ -102,6 +102,8 @@ def walk(text, cwd):
             if not argv:
                 continue
             base, args = os.path.basename(argv[0]), argv[1:]
+            if base == "cd" and args[:1] == ["--"]:
+                args = args[1:] or [HOME]
             if base in {"cd", "pushd"} and args:
                 state[0] = path_of(args[0], state[0])
             elif base == "eval" and depth < 5:

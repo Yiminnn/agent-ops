@@ -152,6 +152,10 @@ sed "s|^WORK_ROOT=.*|WORK_ROOT=\"$V/\"|" "$TMP/home/config" >"$G2/config"
 rmcheck() { CMD=$1 python3 -c 'import json,os;print(json.dumps({"tool_input":{"command":os.environ["CMD"]},"cwd":"/tmp"}))' | AGENT_OPS_HOME="$G2" "$H/deny_wide_rm.py"; }
 has 'slash root, child denied' "$(rmcheck "rm -rf $V/logs")" 'deny'; expect 'slash root, deep allowed' "$(rmcheck "rm -rf $V/worktrees/s/build")" ""
 
+# Round 2, item 9: cd --
+deny deny_merge_git.py "cd -- $A && git reset --hard" /tmp
+deny deny_wide_rm.py "cd -- $V && rm -rf logs" /tmp
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
