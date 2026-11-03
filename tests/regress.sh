@@ -156,6 +156,12 @@ has 'slash root, child denied' "$(rmcheck "rm -rf $V/logs")" 'deny'; expect 'sla
 deny deny_merge_git.py "cd -- $A && git reset --hard" /tmp
 deny deny_wide_rm.py "cd -- $V && rm -rf logs" /tmp
 
+# Round 2, item 10: a GitHub failure is not "everything went away"
+mkdir -p "$TMP/bad"; printf '#!/bin/bash\necho "HTTP 401" >&2; exit 1\n' >"$TMP/bad/gh"; chmod +x "$TMP/bad/gh"
+CK >/dev/null; BEFORE=$(cat "$TMP/home/state/heartbeat.last"); touch -t 202001010000 "$TMP/home/state/heartbeat.last"
+O=$(PATH="$TMP/bad:$TMP/bin:$PATH" "$ROOT/bin/check.sh" 2>&1); expect 'failed probe exits 1' "$?" 1; has 'failed probe says so' "$O" 'probe failed'; hasnt 'no NO CHANGE' "$O" 'NO CHANGE'
+expect 'snapshot kept' "$(cat "$TMP/home/state/heartbeat.last")" "$BEFORE"; expect 'mtime kept' "$(find "$TMP/home/state/heartbeat.last" -mmin +5 | wc -l | tr -d ' ')" 1
+
 # NEXT
 
 echo "regress pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
