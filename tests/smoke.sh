@@ -56,5 +56,12 @@ if on broken; then  # a script that exits 1 and two missing scripts: PreToolUse 
   run broken worker "$B" "Call the Bash tool once with exactly this command: echo agent-ops-broken-probe. Then reply with the word done."
   want broken 'any("onFailure" in r for r in results) and not any(r.strip()=="agent-ops-broken-probe" for r in results) and sum(d.get("type")=="assistant" for d in e) <= 3 and any("session_start.sh" in h and "error" in h for h in hooks) and any("stop_status.py" in h and "error" in h for h in hooks)'
 fi
-if on bin-path; then run bin-path "" "$ROOT" "Call the Bash tool once with exactly this command: command -v session.sh check.sh merge-when-green.sh. Then reply with the word done."; want bin-path 'sum("/plugin/bin/" in r for r in results)==1 and "merge-when-green.sh" in " ".join(results)'; fi
+if on no-python; then  # PATH with no python3: every PreToolUse hook fails; onFailure must block the call
+  NP="$SCRATCH/no-python-bin"; mkdir -p "$NP"; for c in env sh bash cat security; do ln -sf "$(command -v $c)" "$NP/$c"; done
+  OUT="$SCRATCH/smoke-no-python.jsonl"
+  printf '%s\n' "Call the Bash tool once with exactly this command: echo agent-ops-nopython-probe. Then reply with the word done." | env -u CLAUDECODE PATH="$NP" "$CLI" -p --permission-mode bypassPermissions --plugin-dir "$ROOT" \
+    --model claude-sonnet-5-5 --tools Bash --strict-mcp-config --output-format stream-json --verbose --include-hook-events >"$OUT" 2>&1
+  want no-python 'any("onFailure" in r for r in results) and not any(r.strip()=="agent-ops-nopython-probe" for r in results)'
+fi
+if on bin-path; then run bin-path "" "$ROOT" "Call the Bash tool once with exactly this command: command -v session.sh check.sh merge-when-green.sh. Then reply with the word done."; want bin-path 'sum("/bin/session.sh" in r for r in results)==1 and "merge-when-green.sh" in " ".join(results)'; fi
 echo "smoke pass=$pass fail=$fail"; [ "$fail" = 0 ]
