@@ -1,4 +1,5 @@
 # Commitments (replay of 2026-11-03; DEF ids are stand-ins)
+generated 2026-11-03T17:30Z from Linear label committed; do not edit
 
 Ops allowance: heartbeat ticks, PR reviews, merges, recovery, the daily drift audit. Allowed with --ops; no delivery credit.
 
