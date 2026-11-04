@@ -16,7 +16,8 @@ touch "$REG"
 SETSID='import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])'  # own session and group: a kill of the parent group misses it
 die() { echo "session.sh: $*" >&2; exit 1; }
 cli() { [ -n "${CLAUDE_CLI:-}" ] && { echo "$CLAUDE_CLI"; return; }; ls "$CLAUDE_CLI_ROOT/"*/*/claude.app/Contents/MacOS/claude 2>/dev/null | sort -V | tail -1; }
-org_of() { CLAUDE_CONFIG_DIR="$PROFILES/$1" "$(cli)" auth status 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("orgId",""))'; }
+cfg_env() { [ "$1" = default ] || echo "CLAUDE_CONFIG_DIR=$PROFILES/$1"; }  # profile "default": the login's own ~/.claude (its CLAUDE.md and rules reach the worker)
+org_of() { env $(cfg_env "$1") "$(cli)" auth status 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("orgId") or d.get("apiProvider") or "")'; }  # Vertex/Bedrock logins have no orgId: the provider stands in
 need_org() {  # profile personal_ok; sets org
   org=$(org_of "$1"); [ -n "$org" ] || die "cannot read the org of profile $1 (logged out?)"
   [ "$org" = "$TEAM_ORG" ] || [ "$2" = 1 ] || die "profile $1 is personal org $org; use a team profile, or pass --personal-ok if this work holds no client data"
@@ -110,7 +111,7 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin] [sandbox dir]
   cd "$dir" || die "no $dir"
   echo "--- session.sh run $(date -u +%FT%TZ) plugin=$rev cli=$("$B" --version 2>/dev/null | cut -d' ' -f1) ---" >>"$5" || die "cannot write $5"
   [ -n "${8:-}" ] && [ "$WORKER_SANDBOX" != 1 ] && echo "--- session.sh: --write ignored: WORKER_SANDBOX=0 ---" >>"$5"
-  env ${env[@]+"${env[@]}"} AGENT_OPS_LOG="$5" AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
+  env ${env[@]+"${env[@]}"} AGENT_OPS_LOG="$5" AGENT_OPS_ROLE="$role" $(cfg_env "$1") CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
     nohup python3 -c "$SETSID" bash -c 'trap "trap - TERM; kill -TERM -- -$$" TERM; "$@" & c=$!; wait "$c"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &
   echo $!

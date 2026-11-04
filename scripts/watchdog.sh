@@ -39,6 +39,6 @@ failed=""; [ -f "$DONE" ] && failed=$(tail -n 1 "$DONE" | sed -n 's/^[^ ]* faile
 if [ -z "$failed" ] && [ -n "$(find "$REF" -mmin -"$MAX" 2>/dev/null)" ]; then rm -f "$S/watchdog.alerted"; exit "$rc"; fi
 [ -f "$S/watchdog.alerted" ] && exit "$rc"
 if [ -n "$failed" ]; then msg="agent-ops: last tick failed: $failed ($(tail -n 1 "$DONE" | cut -d' ' -f1))."
-else msg="agent-ops: no finished heartbeat for over $MAX minutes (last: $(stat -f %Sm "$REF" 2>/dev/null || echo never))$note."; fi
+else msg="agent-ops: no finished heartbeat for over $MAX minutes (last: $(date -r "$REF" 2>/dev/null || echo never))$note."; fi
 alert "$msg" "$S/watchdog.alerted"
 exit "$rc"

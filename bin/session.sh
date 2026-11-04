@@ -161,7 +161,7 @@ status)
     p=${pid#waiting:}; state=done
     alive "$pid" && state=$([ "$pid" = "$p" ] && echo running || echo queued)
     [ "$state" = done ] && [[ "$pid" != waiting:* ]] && [ "$all" != 1 ] && [ -n "$(find "$log" -mmin +1440 2>/dev/null)" ] && continue
-    age=$( [ -f "$log" ] && echo "$(( ($(date +%s) - $(stat -f %m "$log")) / 60 ))m" || echo "nolog")
+    age=$( [ -f "$log" ] && echo "$(( ($(date +%s) - $(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log")) / 60 ))m" || echo "nolog")
     team=$([ "$org" = "$TEAM_ORG" ] && echo team || echo PERSONAL)
     st=""; [ "$state" = done ] && [[ "$pid" != waiting:* ]] && st=$(final_status "$log")
     printf '%-28s %-8s %-5s %-8s %-8s log %-6s %s %s %s\n' "$name" "$state" "$profile" "$team" "$p" "$age" "${sid:0:8}" "$st" "$(plugin_unseen "$log")"
