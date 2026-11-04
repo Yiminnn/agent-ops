@@ -1,7 +1,8 @@
 #!/bin/bash
 # Read-only heartbeat probe. Prints "NO CHANGE" or the lines that changed since the last run.
-# State: ~/.claude/agent-templates/state/heartbeat.last. Its mtime is the last successful tick, whatever changed:
-# scripts/watchdog.sh reads that age from outside the coordinator.
+# State: ~/.claude/agent-templates/state/heartbeat.last. Its mtime is the last Probe, at the start of a tick, whatever
+# changed. It does not mean the tick finished: scripts/watchdog.sh reads state/heartbeat.done, written at the end of a
+# tick, and falls back to this file only until the first heartbeat.done exists.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"; LAST="$T/state/heartbeat.last"; NEW=$(mktemp "${TMPDIR:-/tmp}/agent-ops-check.XXXXXX")  # bare mktemp ignores TMPDIR on macOS
