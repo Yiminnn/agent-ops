@@ -2,6 +2,7 @@
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"
 [ -f "$T/config" ] || { echo "session.sh: no $T/config; copy config.example" >&2; exit 1; }
 . "$T/config"
+WORKER_SANDBOX=${WORKER_SANDBOX:-0}  # 1: workers run in the Claude Code Bash sandbox
 REG="$T/state/sessions.tsv"
 PROMPTS="$T/prompts"
 LOGS="$LOGS_DIR"
@@ -88,12 +89,13 @@ run_claude() {  # profile sid mode(new|resume) prompt log [plugin] [sandbox dir]
   local B; B=$(cli); [ -x "$B" ] || die "no bundled claude CLI found"
   local flag=(--session-id "$2") role="" dir=${7:-} set env=(); [ "$3" = resume ] && flag=(--resume "$2")
   local rev=off; [ "${6:-}" = plugin ] && { flag+=(--plugin-dir "$PLUGIN_DIR"); role=worker; rev=$(git -C "$PLUGIN_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown); }
-  if [ -n "$dir" ]; then  # Bash and its children may write only here, the --write paths and temp
+  if [ -n "$dir" ] && [ "$WORKER_SANDBOX" = 1 ]; then  # Bash and its children may write only here, the --write paths and temp
     set=$(sandbox_settings "$2" "$dir" "${8:-}") || die "cannot write the sandbox settings"; flag+=(--settings "$set")
     env=(npm_config_cache="$SANDBOX_TMP/npm-cache" PIP_CACHE_DIR="$SANDBOX_TMP/pip-cache")
-  else dir=$PRIMARY_CHECKOUT; fi  # --no-sandbox, or a row from before the sandbox
+  elif [ -z "$dir" ]; then dir=$PRIMARY_CHECKOUT; fi  # no --worktree, --no-sandbox, or a row from before the sandbox
   cd "$dir" || die "no $dir"
   echo "--- session.sh run $(date -u +%FT%TZ) plugin=$rev cli=$("$B" --version 2>/dev/null | cut -d' ' -f1) ---" >>"$5" || die "cannot write $5"
+  [ -n "${8:-}" ] && [ "$WORKER_SANDBOX" != 1 ] && echo "--- session.sh: --write ignored: WORKER_SANDBOX=0 ---" >>"$5"
   env ${env[@]+"${env[@]}"} AGENT_OPS_LOG="$5" AGENT_OPS_ROLE="$role" CLAUDE_CONFIG_DIR="$PROFILES/$1" CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 \
     nohup python3 -c "$SETSID" bash -c 'trap "trap - TERM; kill -TERM -- -$$" TERM; "$@" & c=$!; wait "$c"; echo "--- session.sh end $?"' _ "$B" -p "${flag[@]}" --permission-mode bypassPermissions --model "$WORKER_MODEL" "$(cat "$4")" \
     </dev/null >>"$5" 2>&1 &

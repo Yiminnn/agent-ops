@@ -1,7 +1,7 @@
 #!/bin/bash
 # Coordinator session tool: launch, resume and list claude -p worker sessions, with one registry.
 #
-#   session.sh launch <profile> <name> <prompt-file> --worktree <dir> [--repo <checkout> --base <ref> [--branch <b>]] [--write <dir>]... [--client-data] [--personal-ok]
+#   session.sh launch <profile> <name> <prompt-file> [--worktree <dir> [--repo <checkout> --base <ref> [--branch <b>]]] [--write <dir>]... [--client-data] [--personal-ok]
 #   session.sh launch <profile> <name> <prompt-file> --no-sandbox [--client-data] [--personal-ok]   # rare; say why
 #   session.sh resume <name> <prompt-file> [--after <pid>] [--worktree <dir>] [--write <dir>]... [--personal-ok]  # queue behind a pid, or run now
 #   session.sh recover [--go] [--personal-ok] [<name>...]    # list interrupted rows; --go resumes them
@@ -17,8 +17,9 @@
 # (real client data never goes to a personal account).
 # Plugin: launch, resume, recover and a queued resume all load this plugin (absolute path) as AGENT_OPS_ROLE=worker,
 # unless AGENT_OPS_PLUGIN=0. Column 9 records what the last launch did; it does not decide the next one.
-# Sandbox: a launch runs the worker in the Claude Code Bash sandbox (templates/worker-sandbox.json, passed with
-# --settings), with cwd = --worktree. A missing --worktree dir is created here (unsandboxed) as a linked worktree of
+# Worktree: cwd = --worktree, or the primary checkout with none. Sandbox: off unless WORKER_SANDBOX=1 in the config; off,
+# --write is ignored (a note in the log). With WORKER_SANDBOX=1 a launch needs --worktree and runs the worker in the
+# Claude Code Bash sandbox (templates/worker-sandbox.json, passed with --settings). A missing --worktree dir is created here (unsandboxed) as a linked worktree of
 # --repo on a new branch (--branch, default the dir name) from --base. Bash and every child process may write only
 # the worktree, SANDBOX_WRITES (default: the Daytona PG lane logs), the --write dirs and temp; npm and pip caches go
 # to temp. A --write or --worktree that holds the home dir, WORK_ROOT or the worktrees dir, or overlaps the primary
@@ -56,6 +57,7 @@ launch)
   [ -d "$LOGS" ] || die "no $LOGS: is the work drive mounted? Create it only after you check the drive"
   dir=""; wr=""
   if [ "$nosb" = 1 ]; then [ -z "$wt$repo${writes[*]-}" ] || die "--no-sandbox takes no --worktree, --repo or --write"
+  elif [ -z "$wt" ] && [ "$WORKER_SANDBOX" != 1 ]; then add_writes "$name"  # the primary checkout, as before the sandbox
   else
     [ -n "$wt" ] || die "launch needs --worktree <dir> (with --repo <checkout> --base <ref> to create it), or --no-sandbox with a reason"
     dir=$(path_ok "$name" worktree "$wt") || exit 1

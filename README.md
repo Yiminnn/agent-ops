@@ -1,6 +1,6 @@
 # agent-ops
 
-One operator's coordinator/worker workflow for Claude Code, as a local plugin: a router session, one headless worker per ticket, a structured worker report, guard hooks, a health check from outside the router, and a recovery note after a restart. Scripts, hooks, skills and subagents only. No SQLite, domain model, web panel, MCP server or marketplace. Workers run in the Claude Code Bash sandbox, passed per launch with `--settings` (a plugin cannot turn it on).
+One operator's coordinator/worker workflow for Claude Code, as a local plugin: a router session, one headless worker per ticket, a structured worker report, guard hooks, a health check from outside the router, and a recovery note after a restart. Scripts, hooks, skills and subagents only. No SQLite, domain model, web panel, MCP server or marketplace. Workers run without the Claude Code Bash sandbox by default; `WORKER_SANDBOX=1` in the config turns it on, passed per launch with `--settings` (a plugin cannot turn it on).
 
 ## Division of labour
 
@@ -23,7 +23,7 @@ State stays outside the plugin, in `~/.claude/agent-templates` (or `$AGENT_OPS_H
 
 1. Copy `config.example` to `$AGENT_OPS_HOME/config` and fill it in. Guard paths must be double-quoted literal absolute paths, each key once; anything else fails the hook on purpose.
 2. Create `LOGS_DIR`. A launch refuses if it is missing, so a wiped drive stays visible.
-3. Worker: `bin/session.sh launch <team profile> <name> <prompt-file> --worktree <dir> --repo <checkout> --base origin/<base>`. Launch, resume, recover and a queued resume all pass `--plugin-dir <this dir>` and `AGENT_OPS_ROLE=worker`; only `AGENT_OPS_PLUGIN=0` turns that off. Registry column 9 records what the last launch did. The run header in the log names the plugin revision and CLI version, and the SessionStart hook adds a `plugin loaded` line (hooks run outside the Bash sandbox, so the log dir needs no `--write`); `status` and `check.sh` flag a plugin run without that line (`PLUGIN NOT LOADED`). The first plugin resume of an older row tells the worker to load `agent-ops:worker`. Tell a new worker to load it too.
+3. Worker: `bin/session.sh launch <team profile> <name> <prompt-file> [--worktree <dir> --repo <checkout> --base origin/<base>]`; with no `--worktree` it runs in the primary checkout. Launch, resume, recover and a queued resume all pass `--plugin-dir <this dir>` and `AGENT_OPS_ROLE=worker`; only `AGENT_OPS_PLUGIN=0` turns that off. Registry column 9 records what the last launch did. The run header in the log names the plugin revision and CLI version, and the SessionStart hook adds a `plugin loaded` line (hooks run outside the Bash sandbox, so the log dir needs no `--write` even with `WORKER_SANDBOX=1`); `status` and `check.sh` flag a plugin run without that line (`PLUGIN NOT LOADED`). The first plugin resume of an older row tells the worker to load `agent-ops:worker`. Tell a new worker to load it too.
 4. Coordinator: `AGENT_OPS_ROLE=coordinator claude --plugin-dir <this dir>`, then `/agent-ops:heartbeat`.
 5. Watchdog: fill in `scripts/*.plist.template`, copy it to `~/Library/LaunchAgents/`, `launchctl load`. It needs `AGENT_OPS_ALERT_CMD <message>`, a command that works with no Claude session. With none it only writes `state/watchdog.alert`, and nobody is told.
 

@@ -8,6 +8,7 @@ WORKER_MODEL="claude-opus-5-5"
 PRIMARY_CHECKOUT="<checkout no session may write git to>"
 WORK_ROOT="<the work drive>"
 LOGS_DIR="<work drive>/logs"
+WORKER_SANDBOX="0"  # 1: run each worker in the Claude Code Bash sandbox (then launch needs --worktree); 0: no sandbox
 SANDBOX_WRITES=""  # :-joined dirs every sandboxed worker may write; empty = ~/.claude/agent-templates/daytona-pg-lane-logs
 GH_REPOS="<owner/repo owner/repo>"
 DEPLOY_REPO="<owner/repo>"

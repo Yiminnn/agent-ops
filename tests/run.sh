@@ -123,4 +123,5 @@ rm -f "$TMP/home/state/watchdog.alerted"; touch "$TMP/home/state/heartbeat.stopp
 
 bash "$(dirname "$0")/regress.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/sandbox.sh" || fail=$((fail+1))
+bash "$(dirname "$0")/default.sh" || fail=$((fail+1))
 echo "pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
