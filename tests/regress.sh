@@ -23,16 +23,6 @@ expect 'second refused' "$("$S" resume q1 "$P" 2>&1 | grep -c 'already has a que
 expect 'no third row' "$(grep -c '^q1	' "$TMP/home/state/sessions.tsv")" 2
 for p in $(awk -F'\t' '$1=="q1"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
 
-# Round 1, item 4: cd in a child shell or subshell stays there
-deny deny_merge_git.py "bash -c 'cd /tmp'; git reset --hard" "$A"
-deny deny_merge_git.py "(cd /tmp); git reset --hard" "$A"
-deny deny_merge_git.py 'x=$(cd /tmp); git reset --hard' "$A"
-deny deny_wide_rm.py "bash -c 'cd /tmp'; rm -rf logs" "$V"
-deny deny_wide_rm.py "(cd /tmp); rm -rf logs" "$V"
-deny deny_merge_git.py "(cd $A && git reset --hard)" /tmp
-allow deny_merge_git.py "(cd /tmp && git status); git log" "$A"
-allow deny_wide_rm.py "(cd /tmp && rm -rf logs)" "$V"
-
 # Round 1, item 5: same-second prompts keep their own files
 mkdir -p "$TMP/fixed"; printf '#!/bin/bash\necho 20260101T000000Z\n' >"$TMP/fixed/date"; chmod +x "$TMP/fixed/date"
 echo first >"$TMP/first.md"; echo second >"$TMP/second.md"; "$S" launch team kp "$P" >/dev/null; waitfor "$TMP/logs/kp.log" STUB
@@ -71,15 +61,6 @@ STUB_SLEEP=8 "$S" launch team det "$P" >/dev/null; waitfor "$TMP/logs/det.log" S
 DP=$(tail -1 "$TMP/home/state/sessions.tsv" | cut -f4); DG=$(ps -o pgid= -p "$DP" | tr -d ' ')
 expect 'worker leads its own group' "$DG" "$DP"
 kill -- "-$DP" 2>/dev/null
-
-# Round 1, item 9: $HOME in a guard path fails loudly instead of disabling the guard
-G=$(mktemp -d "$TMP/cfg.XXXXXX"); mkdir -p "$G/state"
-for v in '$HOME/x' '~/x' "'/x'" 'rel/x' '`pwd`/x'; do
-  sed "s|^PRIMARY_CHECKOUT=.*|PRIMARY_CHECKOUT=\"$v\"|" "$TMP/home/config" >"$G/config"
-  echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G" "$H/deny_merge_git.py" >/dev/null 2>&1; expect "bad config value $v" "$?" 1
-done
-sed 's|^PRIMARY_CHECKOUT=.*|PRIMARY_CHECKOUT="/a path/with spaces"|' "$TMP/home/config" >"$G/config"
-echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G" "$H/deny_merge_git.py" >/dev/null 2>&1; expect 'spaces are fine' "$?" 0
 
 # Round 1, item 10: no success without a confirmed merge
 GHS="$TMP/ghs"; mkdir -p "$GHS"
@@ -139,22 +120,6 @@ expect 'dead --after refused while live' "$("$S" resume af "$P" --after 999999 2
 expect 'no new row' "$(grep -c '^af	' "$TMP/home/state/sessions.tsv")" 1
 has 'current pid is fine' "$("$S" resume af "$P" --after "$AP")" 'queued af'
 for p in $(awk -F'\t' '$1=="af"{print $4}' "$TMP/home/state/sessions.tsv"); do kill "${p#waiting:}" 2>/dev/null; done
-
-# Round 2, item 7: one quoted literal path per key, the only form bash and Python read alike
-G2=$(mktemp -d "$TMP/cfg2.XXXXXX"); mkdir -p "$G2/state"; cfgtest() {
-  echo '{"tool_input":{"command":"ls"},"cwd":"/tmp"}' | AGENT_OPS_HOME="$G2" "$H/deny_merge_git.py" >/dev/null 2>&1; expect "$1" "$?" "$2"; }
-{ cat "$TMP/home/config"; echo "PRIMARY_CHECKOUT=\"/other\""; } >"$G2/config"; cfgtest 'duplicate key fails' 1
-sed 's|^PRIMARY_CHECKOUT=\(.*\)|PRIMARY_CHECKOUT=\1 # main|' "$TMP/home/config" >"$G2/config"; cfgtest 'trailing comment fails' 1
-cp "$TMP/home/config" "$G2/config"; cfgtest 'plain config passes' 0
-
-# Round 2, item 8: WORK_ROOT with a trailing slash
-sed "s|^WORK_ROOT=.*|WORK_ROOT=\"$V/\"|" "$TMP/home/config" >"$G2/config"
-rmcheck() { CMD=$1 python3 -c 'import json,os;print(json.dumps({"tool_input":{"command":os.environ["CMD"]},"cwd":"/tmp"}))' | AGENT_OPS_HOME="$G2" "$H/deny_wide_rm.py"; }
-has 'slash root, child denied' "$(rmcheck "rm -rf $V/logs")" 'deny'; expect 'slash root, deep allowed' "$(rmcheck "rm -rf $V/worktrees/s/build")" ""
-
-# Round 2, item 9: cd --
-deny deny_merge_git.py "cd -- $A && git reset --hard" /tmp
-deny deny_wide_rm.py "cd -- $V && rm -rf logs" /tmp
 
 # Round 2, item 10: a GitHub failure is not "everything went away"
 mkdir -p "$TMP/bad"; printf '#!/bin/bash\necho "HTTP 401" >&2; exit 1\n' >"$TMP/bad/gh"; chmod +x "$TMP/bad/gh"
@@ -227,19 +192,12 @@ printf 'lr\tteam\tsidlr\t999999\t%s\t%s\tt\t%s\n' "$P" "$TMP/logs/lr.log" "$TEAM
 has 'recovered legacy loads plugin' "$(grep -e --resume "$TMP/logs/lr.log")" "--plugin-dir $ROOT"
 has 'recovered legacy told to load the worker skill' "$(grep -e --resume "$TMP/logs/lr.log")" 'agent-ops:worker'
 
-# Heredoc text stays matched (light harness: text hooks catch accidents, they do not parse shell). The PR #4 round-1
-# bypass shapes stay denied; the deny message names the way out for text: the Write tool or --body-file
-M=deny_merge_git.py; K=deny_kill.py; NL=$'\n'
+# Heredoc text stays matched (light harness: text hooks catch accidents, they do not parse shell); the deny message
+# names the way out for text: the Write tool
+K=deny_kill.py; NL=$'\n'
 deny $K "cat <<EOF${NL}\$(pkill -f \"\$(printf w)\")${NL}EOF"
-deny $M "cat <<EOF${NL}\$(cd /tmp)${NL}EOF${NL}git push origin main" "$A"
-deny $M "grep -n '<<EOF' notes.sh${NL}git push origin main${NL}cat <<EOF >f${NL}hello${NL}EOF" "$A"
-deny $M "true # <<EOF${NL}git push origin main${NL}cat <<EOF >f${NL}hello${NL}EOF" "$A"
-deny $M "echo \$((1<<EOF))${NL}git push origin main${NL}cat <<EOF >f${NL}hello${NL}EOF" "$A"
 deny $K "cat <<'EOF' |${NL}pkill -f worker${NL}EOF${NL}sh"
-deny $M "cat >/tmp/p.md <<'EOF'${NL}then git push origin x${NL}EOF" "$A"
-has 'deny names the text workaround' "$(hook $M "cat >/tmp/p.md <<'EOF'${NL}git push origin x${NL}EOF" "$A")" '--body-file'
 has 'deny-kill names it too' "$(hook $K 'pkill -f x')" 'Write tool'
-has 'deny-rm names it too' "$(hook deny_wide_rm.py 'rm -rf /')" 'Write tool'
 
 # Proof the plugin loaded: the run header names the plugin revision and CLI version; SessionStart, on startup and on
 # resume, writes a line to the log; a plugin run with no such line shows in status and check.sh

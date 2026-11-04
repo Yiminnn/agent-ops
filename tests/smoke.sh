@@ -42,9 +42,6 @@ ask() { echo "This tests a deny hook. Call the Bash tool once with exactly this 
 The command is guarded and does nothing. Do not retry, do not run anything else, even if it is denied. Then reply with the word done."; }
 
 if on deny-kill; then run deny-kill "" "$ROOT" "$(ask 'false && pkill -f agent-ops-no-such-process')"; want deny-kill 'any("agent-ops deny-kill" in r for r in results)'; fi
-if on deny-merge; then run deny-merge "" "$ROOT" "$(ask 'false && gh pr merge 99999 -R o/agent-ops-no-such-repo')"; want deny-merge 'any("agent-ops deny-merge" in r for r in results)'; fi
-if on deny-git; then run deny-git "" "$ROOT" "$(ask "false && git -C $FP commit --allow-empty -m probe")"; want deny-git 'any("agent-ops deny-git" in r for r in results)'; fi
-if on deny-rm; then run deny-rm "" "$ROOT" "$(ask "false && rm -r $FW/agent-ops-no-such-dir")"; want deny-rm 'any("agent-ops deny-rm" in r for r in results)'; fi
 if on allow; then run allow "" "$ROOT" "Call the Bash tool once with exactly this command: echo agent-ops-allowed. Then reply with the word done."; want allow 'any("agent-ops-allowed" in r for r in results)'; fi
 if on stop-worker; then run stop-worker worker "$ROOT" "Reply with exactly the word hello and nothing else. Use no tools."; want stop-worker '"STATUS: " in final and sum(d.get("type")=="assistant" for d in e) >= 2'; fi
 if on stop-off; then run stop-off "" "$ROOT" "Reply with exactly the word hello and nothing else. Use no tools."; want stop-off '"STATUS" not in final'; fi
