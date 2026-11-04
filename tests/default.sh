@@ -18,6 +18,18 @@ has 'no sandbox npm cache' "$(cat "$TMP/logs/d1.log")" 'npm_cache=[]'
 has 'launch without worktree' "$("$S" launch team d2 "$P" 2>&1)" 'launched d2'; waitfor "$TMP/logs/d2.log" STUB
 hasnt 'no worktree no settings' "$(cat "$TMP/logs/d2.log")" '--settings'; has 'cwd is the primary checkout' "$(cat "$TMP/logs/d2.log")" "STUBCWD $A"
 
+# --repo, --base or --branch with no --worktree is a forgotten --worktree: refused, not run in the primary checkout
+n=$(wc -l <"$REG")
+for f in "--repo $G" "--base HEAD" "--branch b/x"; do
+  has "refuse $f without worktree" "$("$S" launch team d5 "$P" $f 2>&1)" '--repo/--base/--branch need --worktree'
+done
+expect 'no rows for those refusals' "$(wc -l <"$REG")" "$n"
+
+# resume --write on a row with no worktree: ignored with the same note, not refused
+mkdir -p "$TMP/round2"
+has 'resume write on no-worktree row' "$("$S" resume d2 "$P" --write "$TMP/round2" 2>&1)" 'resumed d2'; waitfor "$TMP/logs/d2.log" '--resume'
+has 'resume write ignored note' "$(awk '/session.sh run/{s=""} {s=s $0 "\n"} END{printf "%s", s}' "$TMP/logs/d2.log")" '--write ignored: WORKER_SANDBOX=0'
+
 # --write is accepted and ignored, with a note in the log
 mkdir -p "$TMP/round"; NW3="$V/worktrees/d3"
 has 'launch with write' "$("$S" launch team d3 "$P" --worktree "$NW3" --repo "$G" --base HEAD --write "$TMP/round" 2>&1)" 'launched d3'; waitfor "$TMP/logs/d3.log" STUB

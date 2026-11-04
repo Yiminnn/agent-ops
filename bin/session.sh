@@ -57,7 +57,9 @@ launch)
   [ -d "$LOGS" ] || die "no $LOGS: is the work drive mounted? Create it only after you check the drive"
   dir=""; wr=""
   if [ "$nosb" = 1 ]; then [ -z "$wt$repo${writes[*]-}" ] || die "--no-sandbox takes no --worktree, --repo or --write"
-  elif [ -z "$wt" ] && [ "$WORKER_SANDBOX" != 1 ]; then add_writes "$name"  # the primary checkout, as before the sandbox
+  elif [ -z "$wt" ] && [ "$WORKER_SANDBOX" != 1 ]; then  # the primary checkout, as before the sandbox
+    [ -z "$repo$base$branch" ] || die "--repo/--base/--branch need --worktree <dir>; with no --worktree the worker runs in the primary checkout"
+    add_writes "$name"
   else
     [ -n "$wt" ] || die "launch needs --worktree <dir> (with --repo <checkout> --base <ref> to create it), or --no-sandbox with a reason"
     dir=$(path_ok "$name" worktree "$wt") || exit 1
@@ -82,7 +84,7 @@ resume)
   r=$(row "$name"); [ -n "$r" ] || die "no session $name in registry"
   profile=$(field "$r" 2) sid=$(field "$r" 3) log=$(field "$r" 6) plug=$(policy) dir=$(field "$r" 10) wr=$(field "$r" 11)
   if [ -n "$wt" ]; then dir=$(path_ok "$name" worktree "$wt") || exit 1; [ -d "$dir" ] || die "--worktree $dir is not a directory"; fi
-  [ -z "$dir" ] && [ ${#writes[@]} -gt 0 ] && die "--write needs a sandboxed row; add --worktree"
+  [ -z "$dir" ] && [ ${#writes[@]} -gt 0 ] && [ "$WORKER_SANDBOX" = 1 ] && die "--write needs a sandboxed row; add --worktree"
   add_writes "$name"
   [ "$client" = 1 ] && { : >"$(client_mark "$sid")" || die "cannot write the client-data marker"; }
   [ -e "$(client_mark "$sid")" ] && personal_ok=0
