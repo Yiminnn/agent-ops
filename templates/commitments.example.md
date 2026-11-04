@@ -14,7 +14,8 @@ This is the shape of state/commitments.md, a read-only cache. Do not copy or edi
 Linear (team LINEAR_TEAM, label COMMITTED_LABEL, not completed or canceled), in Linear priority order (Urgent first, no priority last).
 To change a goal, change its Linear issue. To commit or uncommit one, a human adds or removes the label.
 
-- objective = issue title; accountable = assignee; executor = the session that last dispatched on it (registry), or -.
+- objective = issue title; accountable = assignee; executor = the session whose current dispatch is this goal (registry), or -.
+- Ids are DEF-n only: LINEAR_TEAM must be the DEF team. No labelled issue gives a file with no rows: DRIFT NONE committed.
 - done-when, next proof, checkpoint = these lines in the issue description, anywhere in it, first one wins:
     Done when: <the done-when clause>
     Next proof: <one inspectable result: a test, a decision, a resolved question; not activity>

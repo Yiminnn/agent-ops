@@ -9,7 +9,8 @@
 #   DRIFT DISPATCH ops|uncommitted ...      a dispatch since the last check (state/drift-check.last) with no committed goal
 #   DRIFT PENDING overdue <date>|no follow-up: <line>
 #   DRIFT UNKNOWN: <input>                  an input is missing or a gh query failed: never read silence as all clear
-# Exit 0 with no lines, 1 with exceptions, 2 with an UNKNOWN. A merged PR is listed as evidence; it does not clear a
+#   DRIFT NONE committed                    a fresh cache with no rows: no Linear issue carries the label (a valid state)
+# Exit 0 with no lines or only the NONE line, 1 with exceptions, 2 with an UNKNOWN. A merged PR is listed as evidence; it does not clear a
 # passed checkpoint: the accountable human accepts the proof and moves the checkpoint in the Linear issue.
 # check.sh prints these lines and touches state/drift-check.last after it keeps a snapshot. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
 set -u
@@ -34,7 +35,6 @@ for l in lines or []:
     if re.fullmatch(r"DEF-\d+", c[0]):
         if len(c) < 7: unknown.append(f"row of {c[0]} in commitments.md (needs 7 cells)"); continue
         goals[c[0]] = dict(zip(["id", "objective", "human", "done", "proof", "checkpoint", "executor"], c[:7]))
-if lines is not None and not goals: unknown.append("commitments.md has no DEF rows")
 gen = next((m.group(1) for m in map(re.compile(r"generated (\S+) from Linear").match, lines or []) if m), None)
 if gen:
     try: age = now - dt.datetime.fromisoformat(gen.replace("Z", "+00:00"))
@@ -98,8 +98,9 @@ for g, c in goals.items():
 
 for f in dispatches:
     if f[11] == "ops": out.append(f"DRIFT DISPATCH ops {f[0]} {f[6]}: {f[12]}")
-    elif goals and f[11] not in goals: out.append(f"DRIFT DISPATCH uncommitted {f[11]} {f[0]} {f[6]}: {f[12]}")
+    elif gen and f[11] not in goals: out.append(f"DRIFT DISPATCH uncommitted {f[11]} {f[0]} {f[6]}: {f[12]}")
 
+if gen and not goals: print("DRIFT NONE committed")  # a valid state: no Linear issue carries the label
 for u in unknown: print(f"DRIFT UNKNOWN: {u}")
 for l in out: print(l)
 sys.exit(2 if unknown else 1 if out else 0)

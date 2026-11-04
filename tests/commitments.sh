@@ -36,7 +36,36 @@ has 'drift-check judges the rendered executor' "$(DC)" 'DRIFT UNATTENDED DEF-961
 cp "$CM" "$TMP/before"; O=$(echo 'not json' | RENDER 2>&1); expect 'bad input exits 1' "$?" 1; has 'bad input says kept' "$O" 'commitments.md kept'
 expect 'bad input keeps the old file' "$(cat "$CM")" "$(cat "$TMP/before")"
 O=$(echo '[{"title":"no identifier"}]' | RENDER 2>&1); expect 'issue with no identifier exits 1' "$?" 1; has 'names the issue' "$O" 'no identifier: {"title"'; expect 'and keeps the file' "$(cat "$CM")" "$(cat "$TMP/before")"
+O=$(echo '[{"identifier":"ENG-5","title":"x"}]' | RENDER 2>&1); expect 'a non-DEF id exits 1' "$?" 1; has 'names the id' "$O" 'ENG-5 is not DEF-n'
+expect 'and keeps the file too' "$(cat "$CM")" "$(cat "$TMP/before")"
 NOW=2026-11-03T15:30:00Z RENDER <"$TMP/issues.json"; O=$(DC); expect 'stale render exits 2' "$?" 2
 has 'stale render UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments cache stale (generated 2026-11-03T15:30Z)'
+
+# The executor is a session whose current dispatch is the goal: a live session that moved on no longer attends the old one
+sleep 300 & LIVE=$!; touch "$ST/drift-check.last"
+row() { printf 'w1\tteam\ts\t%s\tp\tl\t2026-11-03T%s:00:00Z\to\tplugin\t\t\t%s\t%s\n' "$LIVE" "$1" "$2" "$3"; }
+cat >"$TMP/two.json" <<'J'
+[{"identifier":"DEF-961","title":"Reconcile","assignee":"Liz","description":"Done when: a\nNext proof: b\nCheckpoint: 2099-01-07"},
+ {"identifier":"DEF-962","title":"Planner","assignee":"Liz","description":"Done when: a\nNext proof: b\nCheckpoint: 2099-01-08"}]
+J
+{ row 10 DEF-961 first; row 11 DEF-962 second; } >"$REG"; RENDER <"$TMP/two.json"; O=$(DC)
+has 'moved to another goal: executor only of the new one' "$(cat "$CM")" '| DEF-961 | Reconcile | Liz | a | b | 2099-01-07 | - |'
+has 'moved to another goal: old goal unattended' "$O" 'DRIFT UNATTENDED DEF-961 Reconcile: no live executor'; hasnt 'new goal attended' "$O" 'UNATTENDED DEF-962'
+{ row 10 DEF-961 first; row 11 ops review; } >"$REG"; RENDER <"$TMP/two.json"
+has 'moved to ops: old goal unattended' "$(DC)" 'DRIFT UNATTENDED DEF-961 Reconcile: no live executor'
+{ row 10 DEF-961 first; row 11 '' ''; } >"$REG"; RENDER <"$TMP/two.json"
+has 'a --continue row keeps the dispatch' "$(cat "$CM")" '| DEF-961 | Reconcile | Liz | a | b | 2099-01-07 | w1 |'
+kill "$LIVE" 2>/dev/null
+
+# Bold around the key, the colon or the whole line; a null title; the config read the way the shell reads it
+printf "COMMITTED_LABEL=goal2\nOPS_ALLOWANCE='merges, the audit'\n" >>"$TMP/home/config"; : >"$REG"
+echo '[{"identifier":"DEF-963","title":null,"assignee":"Liz","description":"**Done when**: x\n**Next proof:** y\n**Checkpoint: 2099-01-01**"}]' | RENDER; F=$(cat "$CM")
+has 'bold forms stripped, null title is -' "$F" '| DEF-963 | - | Liz | x | y | 2099-01-01 | - |'
+has 'unquoted config value' "$F" 'from Linear label goal2; do not edit'; has 'single-quoted config value' "$F" 'Ops allowance: merges, the audit'
+
+# No committed goal is a valid state, not an UNKNOWN; a goal dispatch is then uncommitted
+echo '[]' | RENDER; O=$(DC); expect 'empty list exits 0' "$?" 0; expect 'empty list says so' "$O" 'DRIFT NONE committed'
+touch -t 202001010000 "$ST/drift-check.last"; printf 'w9\tteam\ts\t0\tp\tl\t2026-11-03T17:00:00Z\to\tplugin\t\t\tDEF-961\tx\n' >"$REG"
+O=$(DC); has 'empty list: goal dispatch uncommitted' "$O" 'DRIFT DISPATCH uncommitted DEF-961 w9'; has 'still says none' "$O" 'DRIFT NONE committed'
 
 echo "commitments pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
