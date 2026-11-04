@@ -66,6 +66,22 @@ The named failures:
 
 GPT Pro's own closing line: stop after these three. Stopped at the limit of 3 rounds.
 
+## Goal drift (GPT Pro adversarial review of the first drift design, `gpt-drift-answer.md`)
+
+Failure behind it: on 2026-11-03 the coordinator stayed busy and healthy while most worker time went to agent tooling, and the planner (B6) and reconcile (B8) had no owner and slipped. Only the CEO noticed.
+
+| # | Suggestion | Decision | Why |
+|---|---|---|---|
+| 1 | Name the commitments the checker must cover | **Elsewhere** | Drafted by another session. Here: the file it fills, `state/commitments.md` |
+| 2 | "Create a goal first" is no authorization: dispatch only to committed goals, with a bounded expected result; ops allowance with no credit | **Accepted** | `session.sh` gate; `--continue` for a resume of the same work, so new work cannot pass silently |
+| 3 | Observe beyond the coordinator's account; UNKNOWN on a missing input | **Accepted** | The launcher records the tag; `drift-check.sh` reads the registry and gh; the audit reads GitHub and Linear directly |
+| 4 | Progress is new evidence for a next proof, not activity | **Accepted, smaller** | A passed checkpoint stays flagged until the human moves it; a merged PR is listed as evidence only. No automatic evidence comparison |
+| 5 | Unattended commitments, not empty owner fields; waiting does not suppress forever | **Accepted** | Live executor or a pending.md line with a follow-up that has not passed |
+| 6 | One mechanical check every tick, one independent audit per working day, monitored | **Accepted** | `drift-check.sh` in `check.sh`; `drift-audit.sh` under launchd; watchdog checks `drift-audit.done` |
+| 7 | Cut worker-time accounting | **Accepted (not built)** | Dispatch lines only |
+
+Acceptance replay: `tests/fixtures/2026-11-03`, every dispatch tagged to a committed tooling goal. `drift-check.sh` flags B6 and B8 (checkpoint and unattended) and nothing else.
+
 ## Size
 
 Scripts other than tests: 529 lines before these rounds, 587 after (+11 %), and no script over 150. All lines of script: 735 to 1022 (+39 %), which is over the limit of about a third. The excess is `tests/regress.sh`, one block per reproduced bug. Keeping it: it is the proof that each fix holds, and none of it runs in a session.

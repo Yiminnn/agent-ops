@@ -93,7 +93,7 @@ expect 'start worker silent' "$(SS worker)" ""; O=$(SS coordinator); has 'start 
 has 'start on resume too' "$(SS coordinator resume)" 'handoff-2026-01-01.md'
 
 # Watchdog: judges heartbeat.done (end of a tick); heartbeat.last (Probe, start of a tick) only until the first done exists
-D="$ROOT/scripts/watchdog.sh"; LAST="$TMP/home/state/heartbeat.last"; DONE="$TMP/home/state/heartbeat.done"; AL="$TMP/alerts"; rm -f "$TMP/home/state/watchdog."* "$DONE"
+D="$ROOT/scripts/watchdog.sh"; LAST="$TMP/home/state/heartbeat.last"; DONE="$TMP/home/state/heartbeat.done"; AL="$TMP/alerts"; rm -f "$TMP/home/state/watchdog."* "$DONE"; echo "$(date -u +%FT%H:%MZ) ok" >"$TMP/home/state/drift-audit.done"  # a fresh audit: these tests judge the heartbeat
 WD() { AGENT_OPS_ALERT_CMD="$TMP/bin/alert" "$D"; }; printf '#!/bin/bash\necho "$1" >>"%s"\n' "$AL" >"$TMP/bin/alert"; chmod +x "$TMP/bin/alert"
 N() { cat "$AL" 2>/dev/null | wc -l | tr -d ' '; }; OLD() { touch -t 202001010000 "$1"; }
 touch "$LAST"; WD; expect 'no done, fresh last: no alert' "$(N)" 0
@@ -110,4 +110,5 @@ echo '2026-11-03T15:00Z ok' >"$DONE"; OLD "$DONE"; "$D" 2>/dev/null; expect 'no 
 bash "$(dirname "$0")/regress.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/sandbox.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/default.sh" || fail=$((fail+1))
+bash "$(dirname "$0")/drift.sh" || fail=$((fail+1))
 echo "pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

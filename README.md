@@ -14,6 +14,9 @@ Taken from [`deepseek-ai/dsh-superagent-prototype`](https://github.com/deepseek-
 | Health check | `scripts/watchdog.sh` under launchd, no Claude | Alerts when the last finished tick (`state/heartbeat.done`) is over 90 minutes old, or failed |
 | Recovery | `session.sh recover` | Lists runs with no clean end; `--go` resumes them with a note to check the worktree, git log and PR before it repeats an outside action |
 | Handover | `skills/handoff`, heartbeat rule | A new coordinator ticks once, in full, before the old one stops |
+| Dispatch gate | `session.sh launch`/`resume` | Every dispatch names `--goal DEF-n --expect "<result>"` (a row in `state/commitments.md`) or `--ops "<reason>"`; a resume of the same work says `--continue`. Registry columns 12-13 |
+| Drift check | `bin/drift-check.sh`, no model, inside `check.sh` | Passed checkpoints, unattended commitments, ops or uncommitted dispatches, overdue pending items; `UNKNOWN` on a missing input, never an all clear |
+| Drift audit | `bin/drift-audit.sh` under launchd, one fresh read-only worker per working day | At most 3 decisions with evidence and a coverage line, sent only when new; recommends, never acts. The watchdog alerts when it is late or failed |
 
 `bin/check.sh` is the read-only probe. `bin/merge-when-green.sh` merges only the reviewed head, and says `merged` only after GitHub does.
 
@@ -26,6 +29,9 @@ State stays outside the plugin, in `~/.claude/agent-templates` (or `$AGENT_OPS_H
 3. Worker: `bin/session.sh launch <team profile> <name> <prompt-file> [--worktree <dir> --repo <checkout> --base origin/<base>]`; with no `--worktree` it runs in the primary checkout, for read-only work only (reviews, research). Launch, resume, recover and a queued resume all pass `--plugin-dir <this dir>` and `AGENT_OPS_ROLE=worker`; only `AGENT_OPS_PLUGIN=0` turns that off. Registry column 9 records what the last launch did. The run header in the log names the plugin revision and CLI version, and the SessionStart hook adds a `plugin loaded` line (hooks run outside the Bash sandbox, so the log dir needs no `--write` even with `WORKER_SANDBOX=1`); `status` and `check.sh` flag a plugin run without that line (`PLUGIN NOT LOADED`). The first plugin resume of an older row tells the worker to load `agent-ops:worker`. Tell a new worker to load it too.
 4. Coordinator: `AGENT_OPS_ROLE=coordinator claude --plugin-dir <this dir>`, then `/agent-ops:heartbeat`.
 5. Watchdog: fill in `scripts/*.plist.template`, copy it to `~/Library/LaunchAgents/`, `launchctl load`. It needs `AGENT_OPS_ALERT_CMD <message>`, a command that works with no Claude session. With none it only writes `state/watchdog.alert`, and nobody is told. It judges `state/heartbeat.done`, which the heartbeat skill writes at the end of every tick (`<UTC> ok` or `<UTC> failed: <reason>`), not `heartbeat.last`, which `check.sh` touches at Probe, before the tick has done its work. It alerts once per episode when that file is older than `AGENT_OPS_WATCHDOG_MINUTES` (default 90) or its last line says `failed:`. Until the first `heartbeat.done` exists, after an upgrade, it judges `heartbeat.last` and says so in the alert. `state/heartbeat.stopped` silences it.
+
+6. Goals: copy `templates/commitments.example.md` to `state/commitments.md` and fill it with the committed goals only; create `state/pending.md` (empty is fine). Until both exist, `drift-check.sh` prints `DRIFT UNKNOWN` and `--goal` launches are refused (`--ops` works).
+7. Drift audit: set `DRIFT_AUDIT_PROFILE` in the config, fill in `scripts/com.agent-ops.drift-audit.plist.template` (weekdays, 13:30 UTC in local hours), copy and load it like the watchdog. It writes `state/drift-audit.md` and `state/drift-audit.done`; the watchdog alerts once per episode when that is missing, failed, or over 30 working hours old.
 
 Needs Claude Code 2.1.295 or later (`onFailure`), `python3`, `jq`, `gh`, macOS.
 

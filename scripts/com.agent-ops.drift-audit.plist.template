@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Template, not loaded. Daily drift audit, Monday to Friday at 13:30 UTC. launchd reads Hour in local time: set __HOUR__
+     to the local hour of 13:30 UTC (London winter 13, Shanghai 21) and check it again when daylight saving changes.
+     Replace __HOME__, __HOUR__, __ALERT_CMD__ and __PATH__ (a PATH with gh, python3 and jq), copy to ~/Library/LaunchAgents/,
+     then launchctl load. drift-audit.sh itself skips weekends (UTC) and a day that already has an ok audit. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.agent-ops.drift-audit</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/bash</string><string>__HOME__/.claude/agent-templates/plugin/bin/drift-audit.sh</string></array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AGENT_OPS_ALERT_CMD</key><string>__ALERT_CMD__</string>
+    <key>PATH</key><string>__PATH__</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>__HOUR__</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>__HOUR__</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>__HOUR__</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>__HOUR__</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>__HOUR__</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>__HOME__/.claude/agent-templates/state/drift-audit.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/.claude/agent-templates/state/drift-audit.log</string>
+</dict>
+</plist>

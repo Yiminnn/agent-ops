@@ -44,9 +44,12 @@ fi
 echo "STUB role=[$AGENT_OPS_ROLE] $*"
 echo "STUBPID $$"; echo "STUBCWD $PWD"; echo "npm_cache=[${npm_config_cache:-}]"
 [ -n "${STUB_SLEEP:-}" ] && sleep "$STUB_SLEEP"
+[ -n "${STUB_RUN:-}" ] && eval "$STUB_RUN"  # what the test's worker does, such as write a report file
 [ -n "${STUB_REPORT:-}" ] && echo "STATUS: $STUB_REPORT"
 exit "${STUB_EXIT:-0}"
 EOF
-chmod +x "$STUB"; SB="$ROOT/bin/session.sh"; S="$TMP/session-nosb.sh"  # launches without a sandbox, for the tests of other features
+chmod +x "$STUB"; SB="$TMP/session-tagged.sh"; S="$TMP/session-nosb.sh"  # launches without a sandbox, for the tests of other features
+# The dispatch gate: tests of other features launch with --ops and resume with --continue unless they name a tag; tests/drift.sh calls the real script
+printf '#!/bin/bash\ncase " $* " in *" --goal "*|*" --ops "*|*" --continue "*) ;; *) case "$1" in launch) set -- "$@" --ops test ;; resume) set -- "$@" --continue ;; esac ;; esac\nexec "%s" "$@"\n' "$ROOT/bin/session.sh" >"$SB"; chmod +x "$SB"
 printf '#!/bin/bash\n[ "$1" = launch ] && set -- "$@" --no-sandbox\nexec "%s" "$@"\n' "$SB" >"$S"; chmod +x "$S"; REG="$TMP/home/state/sessions.tsv"; P="$TMP/p.md"; echo do-work >"$P"
 waitfor() { local i=0; until grep -q -- "$2" "$1" 2>/dev/null; do i=$((i+1)); [ $i -gt 50 ] && { bad "timeout waiting for $2 in $1"; return; }; sleep 0.1; done; ok; }
