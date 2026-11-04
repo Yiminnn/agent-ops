@@ -18,7 +18,8 @@ grep -q "^$DAY[^ ]* ok$" "$DONE" 2>/dev/null && exit 0  # one audit per working 
 [ -n "${DRIFT_AUDIT_PROFILE:-}" ] || done_line "failed: no DRIFT_AUDIT_PROFILE in $T/config"
 
 prompt=$(mktemp "${TMPDIR:-/tmp}/agent-ops-audit.XXXXXX")
-sed -e "s|__STATE__|$S|g" -e "s|__REPORT__|$REP|g" -e "s|__REPOS__|$GH_REPOS|g" -e "s|__DATE__|$DAY|g" "$HERE/../templates/drift-audit-prompt.md" >"$prompt"
+sed -e "s|__STATE__|$S|g" -e "s|__REPORT__|$REP|g" -e "s|__REPOS__|$GH_REPOS|g" -e "s|__DATE__|$DAY|g" \
+  -e "s|__LINEAR_TEAM__|${LINEAR_TEAM:-<LINEAR_TEAM not set in the config: write an UNKNOWN line>}|g" -e "s|__COMMITTED_LABEL__|${COMMITTED_LABEL:-committed}|g" "$HERE/../templates/drift-audit-prompt.md" >"$prompt"
 rm -f "$REP"
 out=$("$HERE/session.sh" launch "$DRIFT_AUDIT_PROFILE" "drift-audit-${STAMP//[-:]/}" "$prompt" --no-sandbox --ops "daily drift audit" 2>&1); rc=$?
 rm -f "$prompt"

@@ -1,13 +1,17 @@
 #!/bin/bash
-# Mechanical goal-drift check, no model. Reads state/commitments.md, the session registry, state/pending.md and, for a
-# goal whose checkpoint has passed, the merged PRs in GH_REPOS that name its DEF id. Prints one line per exception:
+# Mechanical goal-drift check, no model. Reads state/commitments.md (the cache the heartbeat renders from Linear with
+# commitments-render.py), the session registry, state/pending.md and, for a goal whose checkpoint has passed, the merged
+# PRs in GH_REPOS that name its DEF id. Prints one line per exception:
 #   DRIFT CHECKPOINT <DEF> <objective>: checkpoint <date> passed, next proof "<proof>"; <merged PRs naming it>
 #   DRIFT UNATTENDED <DEF> <objective>: no live executor and no human next action in pending.md (follow-up not passed)
+#   DRIFT INCOMPLETE <DEF> <objective>: the Linear description lacks done-when, next proof or checkpoint ("-" in the cache)
+#   DRIFT UNKNOWN: commitments cache stale (generated <UTC>)   its generated header is over 2 h old, or it has none
 #   DRIFT DISPATCH ops|uncommitted ...      a dispatch since the last check (state/drift-check.last) with no committed goal
 #   DRIFT PENDING overdue <date>|no follow-up: <line>
 #   DRIFT UNKNOWN: <input>                  an input is missing or a gh query failed: never read silence as all clear
-# Exit 0 with no lines, 1 with exceptions, 2 with an UNKNOWN. A merged PR is listed as evidence; it does not clear a
-# passed checkpoint: the accountable human accepts the proof and moves the checkpoint in commitments.md.
+#   DRIFT NONE committed                    a fresh cache with no rows: no Linear issue carries the label (a valid state)
+# Exit 0 with no lines or only the NONE line, 1 with exceptions, 2 with an UNKNOWN. A merged PR is listed as evidence; it does not clear a
+# passed checkpoint: the accountable human accepts the proof and moves the checkpoint in the Linear issue.
 # check.sh prints these lines and touches state/drift-check.last after it keeps a snapshot. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
 set -u
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"
@@ -31,7 +35,12 @@ for l in lines or []:
     if re.fullmatch(r"DEF-\d+", c[0]):
         if len(c) < 7: unknown.append(f"row of {c[0]} in commitments.md (needs 7 cells)"); continue
         goals[c[0]] = dict(zip(["id", "objective", "human", "done", "proof", "checkpoint", "executor"], c[:7]))
-if lines is not None and not goals: unknown.append("commitments.md has no DEF rows")
+gen = next((m.group(1) for m in map(re.compile(r"generated (\S+) from Linear").match, lines or []) if m), None)
+if gen:
+    try: age = now - dt.datetime.fromisoformat(gen.replace("Z", "+00:00"))
+    except ValueError: age = None
+    if age is None or age > dt.timedelta(hours=2): unknown.append(f"commitments cache stale (generated {gen})")
+elif lines is not None: unknown.append("commitments.md has no generated header (the heartbeat writes it from Linear)")
 
 def alive(pid):
     pid = pid.removeprefix("waiting:")
@@ -76,9 +85,11 @@ def merged_prs(g):
     return f"{len(found)} merged PRs name it, latest {found[0][1]} at {found[0][0][:10]}" if found else "no merged PR names it"
 
 for g, c in goals.items():
-    try: cp = dt.date.fromisoformat(c["checkpoint"])
+    miss = [k for k, f in (("done-when", "done"), ("next proof", "proof"), ("checkpoint", "checkpoint")) if c[f] in ("", "-")]
+    if miss: out.append(f"DRIFT INCOMPLETE {g} {c['objective']}: no {', '.join(miss)} in the Linear description (accountable: {c['human']})")
+    try: cp = None if "checkpoint" in miss else dt.date.fromisoformat(c["checkpoint"])
     except ValueError: unknown.append(f"checkpoint of {g} in commitments.md ({c['checkpoint']!r}, want YYYY-MM-DD)"); continue
-    if cp < today:
+    if cp and cp < today:
         out.append(f'DRIFT CHECKPOINT {g} {c["objective"]}: checkpoint {cp} passed, next proof "{c["proof"]}"; {merged_prs(g)}')
     ex = c["executor"] if c["executor"] not in ("", "-") else ""
     if (ex and ex in live) or any(tagged.get(n) == g for n in live) or g in acted: continue
@@ -87,8 +98,9 @@ for g, c in goals.items():
 
 for f in dispatches:
     if f[11] == "ops": out.append(f"DRIFT DISPATCH ops {f[0]} {f[6]}: {f[12]}")
-    elif goals and f[11] not in goals: out.append(f"DRIFT DISPATCH uncommitted {f[11]} {f[0]} {f[6]}: {f[12]}")
+    elif gen and f[11] not in goals: out.append(f"DRIFT DISPATCH uncommitted {f[11]} {f[0]} {f[6]}: {f[12]}")
 
+if gen and not goals: print("DRIFT NONE committed")  # a valid state: no Linear issue carries the label
 for u in unknown: print(f"DRIFT UNKNOWN: {u}")
 for l in out: print(l)
 sys.exit(2 if unknown else 1 if out else 0)

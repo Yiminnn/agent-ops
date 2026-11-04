@@ -1,17 +1,28 @@
 # Commitments
+generated 2026-11-04T09:00Z from Linear label committed; do not edit
 
-Copy to `~/.claude/agent-templates/state/commitments.md` (or `$AGENT_OPS_HOME/state/commitments.md`). The operator and lead own this file; the coordinator and the drift audit read it and never edit it.
-
-Ops allowance: heartbeat ticks, PR reviews, merges, deploy watching, recovery of cut-off sessions, the daily drift audit. These run with `session.sh ... --ops "<reason>"`; they are allowed without a goal and earn no delivery credit.
-
-Rules:
-- One row per committed goal, highest priority first. A goal that is only proposed is not a row: a dispatch to it is refused.
-- `next proof` is one concrete, inspectable result (a test, a decision, a resolved question), not activity. `checkpoint` is the date it is due (YYYY-MM-DD, UTC).
-- `drift-check.sh` flags the row once the checkpoint has passed, until the accountable human accepts the proof and writes the next proof and checkpoint. A merged PR is evidence, not proof.
-- `executor` is the session name that works on the next proof, or `-`. A row with no live executor needs a human next action in `state/pending.md`: a line that names the DEF id and `follow-up YYYY-MM-DD`.
-- Change done-when, scope or dates in the open: the old row stays in git history or the coordinator log, not silently rewritten.
+Ops allowance: heartbeat ticks, PR reviews, merges, deploy watching, recovery of cut-off sessions, the daily drift audit
 
 | DEF | objective | accountable | done-when | next proof | checkpoint | executor |
 |---|---|---|---|---|---|---|
 | DEF-1006 | B6 planner | Yimin | the planner persists a plan and replays it after a restart | a test that restarts the planner and reads the plan back | 2026-11-06 | planner-b6 |
-| DEF-1008 | B8 reconcile | Yimin | reconcile closes drift between plan and ledger end to end | an end-to-end reconcile test on the synthetic ledger | 2026-11-07 | - |
+| DEF-1008 | B8 reconcile | Shubhangi | reconcile closes drift between plan and ledger end to end | - | 2026-11-07 | - |
+
+<!-- Everything below is a note in this example only; bin/commitments-render.py writes the part above.
+
+This is the shape of state/commitments.md, a read-only cache. Do not copy or edit it: each heartbeat rewrites it from
+Linear (team LINEAR_TEAM, label COMMITTED_LABEL, not completed or canceled), in Linear priority order (Urgent first, no priority last).
+To change a goal, change its Linear issue. To commit or uncommit one, a human adds or removes the label.
+
+- objective = issue title; accountable = assignee; executor = the session whose current dispatch is this goal (registry), or -.
+- Ids are DEF-n only: LINEAR_TEAM must be the DEF team. No labelled issue gives a file with no rows: DRIFT NONE committed.
+- done-when, next proof, checkpoint = these lines in the issue description, anywhere in it, first one wins:
+    Done when: <the done-when clause>
+    Next proof: <one inspectable result: a test, a decision, a resolved question; not activity>
+    Checkpoint: YYYY-MM-DD   (UTC date the next proof is due)
+  A missing line renders as "-" (DEF-1008 above), and drift-check.sh prints DRIFT INCOMPLETE for that row.
+- Ops allowance = OPS_ALLOWANCE in the config. Those runs use session.sh ... --ops "<reason>" and earn no delivery credit.
+- drift-check.sh flags a passed checkpoint until the accountable human accepts the proof and moves the checkpoint in
+  Linear; a merged PR is evidence, not proof. A row with no live executor needs a human next action in state/pending.md.
+- A generated line over 2 h old makes drift-check.sh print DRIFT UNKNOWN: commitments cache stale.
+-->

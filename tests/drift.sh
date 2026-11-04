@@ -4,8 +4,8 @@
 set -u
 . "$(dirname "$0")/lib.sh"
 R="$ROOT/bin/session.sh"; ST="$TMP/home/state"; CM="$ST/commitments.md"
-commit() {  # rows "DEF-n|objective|human|done-when|next proof|checkpoint|executor" -> commitments.md
-  { echo '# Commitments'; echo 'Ops allowance: heartbeat, PR review, merges, recovery, the daily drift audit.'; echo
+commit() {  # rows "DEF-n|objective|human|done-when|next proof|checkpoint|executor" -> commitments.md, generated at $GEN
+  { echo '# Commitments'; [ "${GEN:-}" = - ] || echo "generated ${GEN:-2026-11-03T17:30Z} from Linear label committed; do not edit"; echo 'Ops allowance: heartbeat, PR review, merges, recovery, the daily drift audit.'; echo
     echo '| DEF | objective | accountable | done-when | next proof | checkpoint | executor |'; echo '|---|---|---|---|---|---|---|'
     for r in "$@"; do echo "| ${r//|/ | } |"; done; } >"$CM"
 }
@@ -73,6 +73,11 @@ O=$(GH_FAIL=1 DC); expect 'gh failure exits 2' "$?" 2; has 'gh failure UNKNOWN' 
 commit 'DEF-950|Planner|Yimin|plan persisted|persistence test|soon|t1'; has 'bad checkpoint UNKNOWN' "$(DC)" 'DRIFT UNKNOWN: checkpoint of DEF-950'
 touch "$ST/drift-check.last"; commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
 hasnt 'since the last check only' "$(DC)" 'DISPATCH'
+GEN=2026-11-03T15:59Z commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
+O=$(DC); expect 'stale cache exits 2' "$?" 2; has 'stale cache UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments cache stale (generated 2026-11-03T15:59Z)'
+GEN=2026-11-03T16:01Z commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'; hasnt 'cache under 2 h is fresh' "$(DC)" 'stale'
+GEN=- commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'; O=$(DC); expect 'hand-written file exits 2' "$?" 2
+has 'hand-written file UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments.md has no generated header'
 
 # Acceptance replay of 2026-11-03: every dispatch names a valid, committed tooling goal; planner (B6) and reconcile (B8)
 # are committed with no executor and a passed checkpoint. The check must flag both, and only them.
@@ -103,6 +108,7 @@ rep() {  # decisions as "DEF-n reason" args, then optional UNKNOWN lines via $UN
 AU() { PATH="$TMP/bin:$PATH" AGENT_OPS_NOW=$1 DRIFT_AUDIT_PROFILE=${PROF-team} DRIFT_AUDIT_POLL=0.1 AGENT_OPS_ALERT_CMD=${ALERT-$TMP/bin/alert} \
   STUB_RUN=${RUN-"cp '$TMP/rep.md' '$REP'"} "$ROOT/bin/drift-audit.sh"; }
 na() { [ -f "$AL" ] && grep -c '^===$' "$AL" || echo 0; }
+echo 'LINEAR_TEAM="DEF"' >>"$TMP/home/config"  # COMMITTED_LABEL unset: the default
 rm -f "$AD"; AU 2026-11-07T13:30:00Z; expect 'saturday: no audit' "$(cat "$AD" 2>/dev/null)" ''
 rep 'DEF-1006 unattended' 'DEF-1008 checkpoint-missed'; AU 2026-11-03T13:30:00Z
 expect 'done ok' "$(cat "$AD")" '2026-11-03T13:30Z ok'; expect 'one alert' "$(na)" 1
@@ -110,7 +116,8 @@ has 'alert has decision 1' "$(cat "$AL")" 'DECISION: DEF-1006 unattended'; has '
 has 'alert has evidence' "$(cat "$AL")" 'EVIDENCE: https://x/DEF-1006'; has 'alert has coverage' "$(cat "$AL")" 'COVERAGE: 3 committed'
 r=$(grep '^drift-audit-' "$REG" | tail -1); expect 'launched as ops' "$(cut -f12-13 <<<"$r")" $'ops\tdaily drift audit'; expect 'no worktree' "$(cut -f10 <<<"$r")" ''
 L=$(cut -f6 <<<"$r"); waitfor "$L" STUB; has 'read-only prompt' "$(cat "$L")" 'You only recommend'; has 'prompt names the report' "$(cat "$L")" "$REP"
-has 'prompt names the repos' "$(cat "$L")" 'o/app o/web'; has 'runs in the primary checkout' "$(cat "$L")" "STUBCWD $A"
+has 'prompt names the repos' "$(cat "$L")" 'o/app o/web'; has 'prompt reads Linear by team and label' "$(cat "$L")" 'in team `DEF` with the label `committed`'
+has 'runs in the primary checkout' "$(cat "$L")" "STUBCWD $A"
 n=$(grep -c '^drift-audit-' "$REG"); AU 2026-11-03T15:00:00Z; expect 'once per working day' "$(grep -c '^drift-audit-' "$REG")" "$n"
 AU 2026-11-04T13:30:00Z; expect 'same decisions: no new alert' "$(na)" 1; expect 'next day ok' "$(cat "$AD")" '2026-11-04T13:30Z ok'
 rep 'DEF-1006 unattended' 'DEF-990 off-goal-work'; AU 2026-11-05T13:30:00Z; expect 'new decision alerts' "$(na)" 2
