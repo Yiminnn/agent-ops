@@ -1,16 +1,19 @@
 #!/bin/bash
 # Coordinator session tool: launch, resume and list claude -p worker sessions, with one registry.
 #
-#   session.sh launch <profile> <name> <prompt-file> [--worktree <dir> [--repo <checkout> --base <ref> [--branch <b>]]] [--write <dir>]... [--client-data] [--personal-ok]
-#   session.sh launch <profile> <name> <prompt-file> --no-sandbox [--client-data] [--personal-ok]   # rare; say why
-#   session.sh resume <name> <prompt-file> [--after <pid>] [--worktree <dir>] [--write <dir>]... [--personal-ok]  # queue behind a pid, or run now
+#   session.sh launch <profile> <name> <prompt-file> (--goal DEF-n --expect "<result>" | --ops "<reason>") [--worktree <dir> [--repo <checkout> --base <ref> [--branch <b>]]] [--write <dir>]... [--client-data] [--personal-ok]
+#   session.sh launch <profile> <name> <prompt-file> (--goal ... | --ops ...) --no-sandbox [--client-data] [--personal-ok]   # rare; say why
+#   session.sh resume <name> <prompt-file> (--continue | --goal DEF-n --expect "<result>" | --ops "<reason>") [--after <pid>] [--worktree <dir>] [--write <dir>]... [--personal-ok]  # queue behind a pid, or run now
 #   session.sh recover [--go] [--personal-ok] [<name>...]    # list interrupted rows; --go resumes them
 #   session.sh status [--all]                                # registry + live pid + log age + final STATUS
 #   session.sh orgcheck                                      # ORG CHANGED lines, for check.sh
 #   session.sh log <name> [bytes]                            # tail of the session's log
 #
 # Registry: ~/.claude/agent-templates/state/sessions.tsv
-#   name  profile  sid  pid  prompt  log  started_utc  org  [plugin]  [sandbox dir]  [write paths, :-joined]
+#   name  profile  sid  pid  prompt  log  started_utc  org  [plugin]  [sandbox dir]  [write paths, :-joined]  [goal]  [expect or ops reason]
+# Dispatch gate: launch, and a resume that gives new work, name --goal DEF-n (a row in state/commitments.md) with
+# --expect "<concrete artifact or result>", or --ops "<reason>" for routine work (column 12 is then "ops"). A resume that
+# continues the same work says --continue and records no goal; recover does that. drift-check.sh reads columns 12-13.
 # Prompts are copied to $T/prompts/ (internal disk) so a wiped work drive
 # cannot make a queued resume fail silently. Logs go to $LOGS_DIR/<name>.log.
 # Org: launch and resume refuse a personal org unless --personal-ok. --client-data refuses it always

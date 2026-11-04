@@ -90,6 +90,57 @@ O=$(CK); has 'check prints drift' "$O" 'DRIFT UNATTENDED DEF-1006'; has 'check p
 expect 'check touches drift-check.last' "$(find "$ST/drift-check.last" -mmin -1)" "$ST/drift-check.last"
 O=$(CK); hasnt 'old dispatch is not GONE news' "$O" 'GONE DRIFT DISPATCH'; expect 'then no change' "$(CK)" 'NO CHANGE'
 mv "$CM" "$CM.away"; O=$(CK); has 'check shows UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments.md'; mv "$CM.away" "$CM"
-chmod -x "$ROOT/bin/drift-check.sh"; O=$(CK); chmod +x "$ROOT/bin/drift-check.sh"; has 'broken drift-check is UNKNOWN' "$O" 'DRIFT UNKNOWN: drift-check.sh exit'
+cp "$CM" "$CM.ok"; printf '\xff\xfe' >>"$CM"; O=$(CK); mv "$CM.ok" "$CM"; has 'crashed drift-check is UNKNOWN' "$O" 'DRIFT UNKNOWN: drift-check.sh exit 1'
+
+# drift-audit.sh: one fresh read-only worker per working day; it writes drift-audit.md, the script judges it, writes
+# drift-audit.done and alerts only on a new decision or UNKNOWN (deduped by goal + reason)
+AL="$TMP/audit-alerts"; printf '#!/bin/bash\nprintf "%%s\\n===\\n" "$1" >>"%s"\n' "$AL" >"$TMP/bin/alert"; chmod +x "$TMP/bin/alert"
+AD="$ST/drift-audit.done"; REP="$ST/drift-audit.md"
+rep() {  # decisions as "DEF-n reason" args, then optional UNKNOWN lines via $UNK
+  { echo '# Drift audit'; for d in "$@"; do printf 'DECISION: %s\nWRONG: w %s\nNEEDED: n\nEVIDENCE: https://x/%s\n\n' "$d" "$d" "${d%% *}"; done
+    [ -n "${UNK:-}" ] && echo "$UNK"; echo 'COVERAGE: 3 committed goals; registry, coordinator.md, Linear, GitHub read at 13:30Z'; } >"$TMP/rep.md"
+}
+AU() { PATH="$TMP/bin:$PATH" AGENT_OPS_NOW=$1 DRIFT_AUDIT_PROFILE=${PROF-team} DRIFT_AUDIT_POLL=0.1 AGENT_OPS_ALERT_CMD=${ALERT-$TMP/bin/alert} \
+  STUB_RUN=${RUN-"cp '$TMP/rep.md' '$REP'"} "$ROOT/bin/drift-audit.sh"; }
+na() { [ -f "$AL" ] && grep -c '^===$' "$AL" || echo 0; }
+rm -f "$AD"; AU 2026-11-07T13:30:00Z; expect 'saturday: no audit' "$(cat "$AD" 2>/dev/null)" ''
+rep 'DEF-1006 unattended' 'DEF-1008 checkpoint-missed'; AU 2026-11-03T13:30:00Z
+expect 'done ok' "$(cat "$AD")" '2026-11-03T13:30Z ok'; expect 'one alert' "$(na)" 1
+has 'alert has decision 1' "$(cat "$AL")" 'DECISION: DEF-1006 unattended'; has 'alert has decision 2' "$(cat "$AL")" 'DEF-1008 checkpoint-missed'
+has 'alert has evidence' "$(cat "$AL")" 'EVIDENCE: https://x/DEF-1006'; has 'alert has coverage' "$(cat "$AL")" 'COVERAGE: 3 committed'
+r=$(grep '^drift-audit-' "$REG" | tail -1); expect 'launched as ops' "$(cut -f12-13 <<<"$r")" $'ops\tdaily drift audit'; expect 'no worktree' "$(cut -f10 <<<"$r")" ''
+L=$(cut -f6 <<<"$r"); waitfor "$L" STUB; has 'read-only prompt' "$(cat "$L")" 'You only recommend'; has 'prompt names the report' "$(cat "$L")" "$REP"
+has 'prompt names the repos' "$(cat "$L")" 'o/app o/web'; has 'runs in the primary checkout' "$(cat "$L")" "STUBCWD $A"
+n=$(grep -c '^drift-audit-' "$REG"); AU 2026-11-03T15:00:00Z; expect 'once per working day' "$(grep -c '^drift-audit-' "$REG")" "$n"
+AU 2026-11-04T13:30:00Z; expect 'same decisions: no new alert' "$(na)" 1; expect 'next day ok' "$(cat "$AD")" '2026-11-04T13:30Z ok'
+rep 'DEF-1006 unattended' 'DEF-990 off-goal-work'; AU 2026-11-05T13:30:00Z; expect 'new decision alerts' "$(na)" 2
+has 'only the new one' "$(sed -n '/^===$/,$p' "$AL" | sed 1d)" 'DEF-990 off-goal-work'; hasnt 'not the old one' "$(sed -n '/^===$/,$p' "$AL" | sed 1d)" 'DEF-1006'
+rep; AU 2026-11-06T13:30:00Z; expect 'no decision: no alert' "$(na)" 2
+rep 'DEF-1006 unattended'; AU 2026-11-09T13:30:00Z; expect 'a cleared decision that comes back alerts again' "$(na)" 3
+UNK='UNKNOWN: Linear status of DEF-1008 (MCP not connected)' rep; AU 2026-11-10T13:30:00Z; expect 'UNKNOWN alerts' "$(na)" 4; has 'UNKNOWN text' "$(tail -5 "$AL")" 'MCP not connected'
+RUN=true AU 2026-11-11T13:30:00Z; has 'no report: failed' "$(cat "$AD")" 'failed: no report'
+rep 'DEF-1 other' 'DEF-2 other' 'DEF-3 other' 'DEF-4 other'; AU 2026-11-12T13:30:00Z; has 'over 3 decisions: failed' "$(cat "$AD")" 'failed: 4 decisions'
+rep 'DEF-1006 bogus-reason'; AU 2026-11-13T13:30:00Z; has 'unknown reason code: failed' "$(cat "$AD")" 'failed: bad DECISION line'
+{ echo '# x'; } >"$TMP/rep.md"; AU 2026-11-16T13:30:00Z; has 'no coverage: failed' "$(cat "$AD")" 'failed: no COVERAGE line'
+rep 'DEF-1008 unattended'; ALERT= AU 2026-11-17T13:30:00Z; has 'no alert command: failed' "$(cat "$AD")" 'failed: no AGENT_OPS_ALERT_CMD'
+AU 2026-11-17T15:00:00Z; expect 'a failed day retries and sends' "$(cat "$AD")" '2026-11-17T15:00Z ok'; has 'sent after retry' "$(tail -8 "$AL")" 'DEF-1008 unattended'
+rep; PROF=nope AU 2026-11-18T13:30:00Z; has 'launch refused: failed' "$(cat "$AD")" 'failed: launch: session.sh: unknown profile nope'
+
+# watchdog.sh: alerts once per episode when drift-audit.done is missing, says failed, or is over 30 h old on a weekday
+# (the weekend does not count against Monday)
+WAL="$TMP/wd-alerts"; printf '#!/bin/bash\necho "$1" >>"%s"\n' "$WAL" >"$TMP/bin/walert"; chmod +x "$TMP/bin/walert"
+WD() { AGENT_OPS_NOW=$1 AGENT_OPS_ALERT_CMD="$TMP/bin/walert" "$ROOT/scripts/watchdog.sh"; }; nw() { cat "$WAL" 2>/dev/null | wc -l | tr -d ' '; }
+echo "$(date -u +%FT%H:%MZ) ok" >"$ST/heartbeat.done"; rm -f "$ST/watchdog."*; rm -f "$AD"
+WD 2026-11-03T14:00:00Z; expect 'no audit yet alerts' "$(nw)" 1; has 'names the missing file' "$(cat "$WAL")" 'no drift-audit.done yet'; WD 2026-11-03T14:00:00Z; expect 'missing once' "$(nw)" 1
+echo '2026-11-03T13:30Z ok' >"$AD"; WD 2026-11-03T14:00:00Z; expect 'fresh audit: quiet' "$(nw)" 1
+WD 2026-11-04T19:00:00Z; expect '29.5 h: quiet' "$(nw)" 1; WD 2026-11-04T20:00:00Z; expect '30.5 h on a weekday alerts' "$(nw)" 2; has 'stale text' "$(tail -1 "$WAL")" 'no drift audit since 2026-11-03T13:30Z'
+WD 2026-11-04T21:00:00Z; expect 'stale once' "$(nw)" 2
+echo '2026-11-06T13:30Z ok' >"$AD"; WD 2026-11-07T20:00:00Z; WD 2026-11-08T20:00:00Z; expect 'weekend quiet' "$(nw)" 2
+WD 2026-11-09T10:00:00Z; expect 'monday morning, friday audit: quiet' "$(nw)" 2; WD 2026-11-09T20:00:00Z; expect 'monday evening, no monday audit: alerts' "$(nw)" 3
+echo '2026-11-10T13:30Z failed: no COVERAGE line' >"$AD"; WD 2026-11-10T14:00:00Z; expect 'failed alerts' "$(nw)" 4; has 'failed text' "$(tail -1 "$WAL")" 'drift audit failed: no COVERAGE line'
+WD 2026-11-10T14:30:00Z; expect 'failed once' "$(nw)" 4
+echo '2026-11-11T13:30Z ok' >"$AD"; WD 2026-11-11T14:00:00Z; echo '2026-11-12T13:30Z failed: launch: x' >"$AD"; WD 2026-11-12T14:00:00Z; expect 'second failure episode' "$(nw)" 5
+touch "$ST/heartbeat.stopped"; echo '2026-11-13T13:30Z ok' >"$AD"; WD 2026-11-13T14:00:00Z; echo '2026-11-13T15:00Z failed: y' >"$AD"; WD 2026-11-13T16:00:00Z
+expect 'audit check runs with the heartbeat stopped' "$(nw)" 6; rm -f "$ST/heartbeat.stopped"
 
 echo "drift pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
