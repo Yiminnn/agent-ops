@@ -31,13 +31,14 @@ set -u
 . "$(dirname "$0")/session-lib.sh"
 
 cmd=${1:-status}; shift || true
-pos=(); personal_ok=0; client=0; after=""; go=0; all=0; wt=""; writes=(); repo=""; base=""; branch=""; nosb=0
+pos=(); personal_ok=0; client=0; after=""; go=0; all=0; wt=""; writes=(); repo=""; base=""; branch=""; nosb=0; goal=""; expect=""; ops=""; cont=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --personal-ok) personal_ok=1 ;; --client-data) client=1 ;; --go) go=1 ;; --all) all=1 ;;
     --after) after=${2:-}; shift ;;
     --worktree) wt=${2:?--worktree <dir>}; shift ;; --write) writes+=("${2:?--write <dir>}"); shift ;;
     --repo) repo=${2:-}; shift ;; --base) base=${2:-}; shift ;; --branch) branch=${2:-}; shift ;; --no-sandbox) nosb=1 ;;
+    --goal) goal=${2:-}; shift ;; --expect) expect=${2:-}; shift ;; --ops) ops=${2:-}; shift ;; --continue) cont=1 ;;
     *) pos+=("$1") ;;
   esac
   shift
@@ -52,6 +53,7 @@ launch)
   profile=$1 name=$2 prompt=$3
   [ -d "$PROFILES/$profile" ] || die "unknown profile $profile"
   [ -z "$(row "$name")" ] || die "name $name already in registry; pick another or use resume"
+  dispatch_tag "$goal" "$expect" "$ops" || die "launch needs --goal DEF-n --expect \"<artifact or result>\" (a goal in $COMMITMENTS), or --ops \"<reason>\" for routine work"
   [ "$client" = 1 ] && personal_ok=0
   need_org "$profile" "$personal_ok"
   [ -d "$LOGS" ] || die "no $LOGS: is the work drive mounted? Create it only after you check the drive"
@@ -75,13 +77,17 @@ launch)
   sid=$(uuidgen | tr 'A-Z' 'a-z'); log="$LOGS/$name.log"
   [ "$client" = 1 ] && { : >"$(client_mark "$sid")" || die "cannot write the client-data marker"; }
   pid=$(run_claude "$profile" "$sid" new "$kept" "$log" "$plug" "$dir" "$wr") || exit 1
-  add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug" "$dir" "$wr"
+  add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug" "$dir" "$wr" "$tag" "$what"
   echo "launched $name pid=$pid sid=$sid profile=$profile log=$log"
   ;;
 resume)
   [ $# -ge 2 ] || die "usage: resume <name> <prompt-file> [--after <pid>] [--personal-ok]"
   name=$1 prompt=$2
   r=$(row "$name"); [ -n "$r" ] || die "no session $name in registry"
+  tag="" what=""
+  if ! dispatch_tag "$goal" "$expect" "$ops"; then
+    [ "$cont" = 1 ] || die "resume needs --continue (the same work as its last dispatch), or for new work --goal DEF-n --expect \"<artifact or result>\" or --ops \"<reason>\""
+  elif [ "$cont" = 1 ]; then die "--continue or a new --goal/--ops, not both"; fi
   profile=$(field "$r" 2) sid=$(field "$r" 3) log=$(field "$r" 6) plug=$(policy) dir=$(field "$r" 10) wr=$(field "$r" 11)
   if [ -n "$wt" ]; then dir=$(path_ok "$name" worktree "$wt") || exit 1; [ -d "$dir" ] || die "--worktree $dir is not a directory"; fi
   [ -z "$dir" ] && [ ${#writes[@]} -gt 0 ] && [ "$WORKER_SANDBOX" = 1 ] && die "--write needs a sandboxed row; add --worktree"
@@ -105,11 +111,11 @@ resume)
     recheck=check; [ "$personal_ok" = 1 ] && recheck=""
     nohup python3 -c "$SETSID" bash -c 'while kill -0 "$6" 2>/dev/null; do sleep 0.05; done; while kill -0 "$1" 2>/dev/null; do sleep 30; done; exec "$2" _run "$3" "$4" "$5"' _ \
       "$after" "$0" "$name" "$kept" "$recheck" "$$" </dev/null >>"$log" 2>&1 &
-    add_row "$name" "$profile" "$sid" "waiting:$!" "$kept" "$log" "$org" "$plug" "$dir" "$wr"
+    add_row "$name" "$profile" "$sid" "waiting:$!" "$kept" "$log" "$org" "$plug" "$dir" "$wr" "$tag" "$what"
     echo "queued $name after pid $after (waiter $!)"
   else
     pid=$(run_claude "$profile" "$sid" resume "$kept" "$log" "$plug" "$dir" "$wr") || exit 1
-    add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug" "$dir" "$wr"
+    add_row "$name" "$profile" "$sid" "$pid" "$kept" "$log" "$org" "$plug" "$dir" "$wr" "$tag" "$what"
     echo "resumed $name pid=$pid"
   fi
   ;;
@@ -142,7 +148,7 @@ recover)
     echo "interrupted $name profile=$profile sid=${sid:0:8}"
     if [ "$go" = 1 ]; then
       tmp=$(mktemp "${TMPDIR:-/tmp}/agent-ops-recover.XXXXXX"); printf '%s\n' "$note" >"$tmp"
-      ok=(); [ "$personal_ok" = 1 ] && ok=(--personal-ok)
+      ok=(--continue); [ "$personal_ok" = 1 ] && ok+=(--personal-ok)
       "$0" resume "$name" "$tmp" ${ok[@]+"${ok[@]}"} || rc=1; rm -f "$tmp"
     fi
   done; exit "$rc"; }

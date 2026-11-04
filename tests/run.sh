@@ -110,4 +110,5 @@ echo '2026-11-03T15:00Z ok' >"$DONE"; OLD "$DONE"; "$D" 2>/dev/null; expect 'no 
 bash "$(dirname "$0")/regress.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/sandbox.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/default.sh" || fail=$((fail+1))
+bash "$(dirname "$0")/drift.sh" || fail=$((fail+1))
 echo "pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

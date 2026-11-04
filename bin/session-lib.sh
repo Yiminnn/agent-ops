@@ -25,7 +25,21 @@ client_mark() { echo "$T/state/client-$1"; }  # holds no data: says this sid may
 policy() { [ "${AGENT_OPS_PLUGIN:-1}" = 0 ] || echo plugin; }  # every launch path: the plugin, unless turned off explicitly
 row() { awk -F'\t' -v n="$1" '$1==n' "$REG" | tail -1; }
 field() { cut -f"$2" <<<"$1"; }
-add_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$(date -u +%FT%TZ)" "$7" "${8:-}" "${9:-}" "${10:-}" >>"$REG"; }
+add_row() { printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" "$6" "$(date -u +%FT%TZ)" "$7" "${8:-}" "${9:-}" "${10:-}" "${11:-}" "${12:-}" >>"$REG"; }
+COMMITMENTS="$T/state/commitments.md"
+dispatch_tag() {  # goal expect ops; sets tag and what (registry columns 12-13), or dies naming the flags the dispatch needs
+  [ -n "$1" ] && [ -n "$3" ] && die "--goal or --ops, not both"
+  if [ -n "$3" ]; then tag=ops what=$3
+  elif [ -n "$1" ]; then
+    [[ "$1" =~ ^DEF-[0-9]+$ ]] || die "--goal takes a DEF id such as DEF-123, not $1"
+    [ -n "$2" ] || die "--goal $1 needs --expect \"<the concrete artifact or result this dispatch delivers>\""
+    [ -f "$COMMITMENTS" ] || die "no $COMMITMENTS: a --goal must be a committed goal there (templates/commitments.example.md)"
+    awk -F'|' -v g="$1" '{gsub(/ /,"",$2)} $2==g {f=1} END {exit !f}' "$COMMITMENTS" ||
+      die "$1 is not a row in $COMMITMENTS: dispatch to a committed goal, use --ops \"<reason>\" for routine work, or ask the accountable human to commit it"
+    tag=$1 what=$2
+  else return 1; fi
+  what=$(tr '\t\n' '  ' <<<"$what" | sed 's/ *$//')
+}
 path_ok() {  # name kind(worktree|write) path [own worktree]: print its real path, or die if it reaches past this worker's own tree
   python3 - "$1" "$2" "$3" "${4:-}" "$REG" "$HOME" "$WORK_ROOT" "$PRIMARY_CHECKOUT" <<'EOF' || exit 1
 import os, subprocess, sys

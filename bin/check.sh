@@ -3,6 +3,7 @@
 # State: ~/.claude/agent-templates/state/heartbeat.last. Its mtime is the last Probe, at the start of a tick, whatever
 # changed. It does not mean the tick finished: scripts/watchdog.sh reads state/heartbeat.done, written at the end of a
 # tick, and falls back to this file only until the first heartbeat.done exists.
+# The snapshot holds drift-check.sh's DRIFT lines: a goal-drift exception shows once as NEW, and as GONE when it clears.
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"; LAST="$T/state/heartbeat.last"; NEW=$(mktemp "${TMPDIR:-/tmp}/agent-ops-check.XXXXXX")  # bare mktemp ignores TMPDIR on macOS
@@ -18,14 +19,17 @@ T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"; LAST="$T/state/heartbeat.l
   gh run list -R "$DEPLOY_REPO" -b "$DEPLOY_BRANCH" -L 1 --json workflowName,status,conclusion,headSha --jq '.[]|"DEPLOY \(.workflowName) \(.status) \(.conclusion) \(.headSha[0:9])"' 2>/dev/null || exit 1
   "$HERE/session.sh" status 2>/dev/null | awk '{s="SESSION " $1 " " $2; st=$9; if (st=="plugin-not-loaded") st=""; if (st!="") s=s " STATUS:" st " pid=" $5; if ($NF=="plugin-not-loaded") s=s " PLUGIN NOT LOADED"; print s}' || exit 1
   "$HERE/session.sh" orgcheck 2>/dev/null || exit 1
+  d=$("$HERE/drift-check.sh" 2>/dev/null); rc=$?  # 0 clear, 1 exceptions, 2 UNKNOWN; anything else, or no line with a nonzero exit, is a broken check
+  d=$(grep '^DRIFT ' <<<"$d"); { [ "$rc" -le 2 ] && { [ "$rc" = 0 ] || [ -n "$d" ]; }; } || d="DRIFT UNKNOWN: drift-check.sh exit $rc"
+  [ -z "$d" ] || echo "$d"
   sso="SSO ok"  # every profile: one profile's cached role credentials can outlive the SSO token
   for p in $SSO_PROFILES; do aws sts get-caller-identity --profile "$p" >/dev/null 2>&1 || sso="SSO EXPIRED"; done
   echo "$sso"
   free=$(df -g / | awk 'NR==2{print $4}'); [ "$free" -lt 20 ] && echo "DISK internal ${free}GiB free (<20)"
   [ -d "$LOGS_DIR" ] || echo "DRIVE $WORK_ROOT missing or wiped"
 } | sort > "$NEW" || { echo "check.sh: probe failed; last snapshot kept" >&2; rm -f "$NEW"; exit 1; }
-if [ -f "$LAST" ] && cmp -s "$LAST" "$NEW"; then echo "NO CHANGE"; touch "$LAST"; else
-  echo "CHANGED:"; if [ -f "$LAST" ]; then diff "$LAST" "$NEW" | grep '^[<>]' | sed 's/^</GONE/;s/^>/NEW /'; else cat "$NEW"; fi
-  cp "$NEW" "$LAST"
-fi
+if [ -f "$LAST" ]; then ch=$(diff "$LAST" "$NEW" | grep '^[<>]' | sed 's/^</GONE/;s/^>/NEW /' | grep -v '^GONE DRIFT DISPATCH '); else ch=$(cat "$NEW"); fi
+if [ -z "$ch" ]; then echo "NO CHANGE"; else echo "CHANGED:"; echo "$ch"; fi  # a dispatch line that only went away is no change
+cp "$NEW" "$LAST"
+touch "$T/state/drift-check.last"  # the next DRIFT DISPATCH lines start here
 rm -f "$NEW"

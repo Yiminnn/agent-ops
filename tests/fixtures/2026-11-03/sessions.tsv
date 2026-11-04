@@ -1,0 +1,4 @@
+sandbox	team	s1	__LIVE__	p	l	2026-11-03T02:10:00Z	team-org-uuid	plugin			DEF-990	PR: workers in the Bash sandbox
+plugin-policy	team	s2	__LIVE__	p	l	2026-11-03T04:40:00Z	team-org-uuid	plugin			DEF-990	PR: one plugin policy for every launch
+watchdog-done	team	s3	__LIVE__	p	l	2026-11-03T07:05:00Z	team-org-uuid	plugin			DEF-990	PR: watchdog judges heartbeat.done
+handled-ledger	team	s4	999999	p	l	2026-11-03T09:30:00Z	team-org-uuid	plugin			DEF-990	PR: heartbeat tracks reviews in handled.txt
