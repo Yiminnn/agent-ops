@@ -4,6 +4,9 @@
 set -u
 . "$(dirname "$0")/lib.sh"
 
+# Guards: only deny_kill (Yimin, 2026-11-04: text hooks gave false positives; keep the harness light)
+expect 'only deny_kill guards Bash' "$(jq -r '.hooks.PreToolUse[].hooks[].command' "$ROOT/hooks/hooks.json" | sed 's|.*/||; s|"$||')" deny_kill.py
+
 # 1. kills
 K=deny_kill.py
 deny $K 'pkill -f "make test"'; deny $K 'pkill -fl foo'; deny $K 'pkill --full foo'; deny $K 'killall python'; deny $K 'pkill python'
@@ -11,29 +14,6 @@ deny $K 'sleep 1; pkill -f x'; deny $K 'ls && sudo pkill -f x'; deny $K 'bash -c
 deny $K 'timeout 5 pkill -f x'; deny $K 'pkill -P 123 -f x'; deny $K '/usr/bin/killall x'; deny $K 'for p in a; do pkill $p; done'
 allow $K 'kill 1234'; allow $K 'pkill -P 1234'; allow $K 'pkill -P "$PID" python'; allow $K 'echo pkill -f foo'; allow $K 'grep "killall" notes.txt'
 allow $K 'git commit -m "deny pkill -f in the hook"'; allow $K 'ls'; allow $K "cat it's"
-
-# 2. merge and primary-checkout git
-M=deny_merge_git.py
-deny $M 'gh pr merge 12 -R o/r --squash'; deny $M 'gh -R o/r pr merge 12'; deny $M 'gh pr --repo o/r merge 12'; deny $M 'while :; do gh pr merge 1; sleep 30; done'
-deny $M 'gh api -X PUT repos/o/r/pulls/1/merge'; deny $M "gh api graphql -f query='mutation{mergePullRequest}'"
-allow $M 'merge-when-green.sh o/r 12 abc1234'; allow $M '~/.claude/agent-templates/merge-when-green.sh o/r 1 abc1234 --merge'
-allow $M 'gh pr view 12'; allow $M 'gh pr list --search merge'; allow $M 'grep "gh pr merge" README.md'; allow $M 'gh api repos/o/r/pulls/1'
-deny $M 'git commit -m x' $A; deny $M "git -C $A checkout dev -- ." /tmp; deny $M "cd $A && git reset --hard" /tmp; deny $M "git --git-dir=$A/.git push origin x" /tmp
-deny $M 'git stash' $A; deny $M 'git stash list' $A; deny $M 'git worktree remove x' $A; deny $M 'git worktree prune' $A; deny $M 'git branch -D x' $A
-deny $M 'git branch newb' $A; deny $M 'git clean -fd' $A; deny $M 'git pull' $A; deny $M 'git update-ref refs/x y' $A; deny $M 'gh pr checkout 12' $A
-deny $M 'git status && git add .' "$A/backend"; deny $M "bash -c 'git -C $A merge x'" /tmp; deny $M 'git -c a=b commit' $A; deny $M 'git tag v1' $A
-allow $M 'git status' $A; allow $M 'git log --oneline' $A; allow $M 'git diff' "$A/backend"; allow $M 'git fetch origin dev' $A; allow $M 'git branch -a' $A
-allow $M "git -C $A worktree add $V/worktrees/s -b b/s origin/dev" /tmp; allow $M "git worktree remove $V/worktrees/s" $A; deny $M "git worktree remove --force $V/worktrees/s" $A; allow $M 'git worktree list' $A; allow $M 'git config --get user.name' $A
-allow $M 'git commit -m x' $V/worktrees/s; allow $M "git -C $V/worktrees/s push origin x" $A; allow $M 'git commit -m x' "$A/.worktrees/s"
-allow $M 'gh pr checkout 12' $V/worktrees/s; allow $M 'git commit -m "git reset --hard is bad"' /tmp
-
-# 3. wide rm
-W=deny_wide_rm.py; VU=$(echo "$V" | tr a-z A-Z)
-deny $W 'rm -rf /'; deny $W 'rm -rf /*'; deny $W 'rm -r ~'; deny $W 'rm -rf ~/'; deny $W 'rm -rf "$HOME"'; deny $W 'rm -rf ${HOME}/*'; deny $W "rm -r $V"; deny $W "rm -fr $V/"
-deny $W "rm -rf $V/*"; deny $W "rm -Rf $V/logs"; deny $W "rm --recursive --force $V/worktrees"; deny $W "cd $V && rm -rf logs" /tmp; deny $W 'rm -rf logs' $V; deny $W 'rm -rf .' $V/logs
-deny $W 'rm -rf ..' $V/logs/x/.. ; deny $W "sudo rm -rf $V/logs"; deny $W "bash -c 'rm -rf /'"; deny $W "ls; rm -rf -- $V/x"; deny $W "rm -rf $(dirname "$V")"; deny $W 'rm -rf /Users'; deny $W "rm -rf $VU/logs"
-allow $W "rm -rf $V/worktrees/agent-ops-scratch/x"; allow $W 'rm -rf /tmp/foo'; allow $W 'rm -rf build' $V/worktrees/s; allow $W "rm $V/x"; allow $W 'rm -f ~/x'; allow $W "echo rm -rf /"; allow $W 'rm -rf ~/scratch/x'
-allow $W "grep 'rm -rf /' notes.md"; allow $W 'git commit -m "rm -rf / is bad"'; allow $W 'python3 -c "import shutil"'
 
 # 4. Stop hook
 stop() { MSG=$1 ACTIVE=${2:-false} BG=${3:-[]} python3 -c 'import json,os;print(json.dumps({"last_assistant_message":os.environ["MSG"],"stop_hook_active":os.environ["ACTIVE"]=="true","background_tasks":json.loads(os.environ["BG"])}))' | AGENT_OPS_ROLE=${ROLE-worker} "$H/stop_status.py"; }
@@ -123,4 +103,5 @@ rm -f "$TMP/home/state/watchdog.alerted"; touch "$TMP/home/state/heartbeat.stopp
 
 bash "$(dirname "$0")/regress.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/sandbox.sh" || fail=$((fail+1))
+bash "$(dirname "$0")/default.sh" || fail=$((fail+1))
 echo "pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

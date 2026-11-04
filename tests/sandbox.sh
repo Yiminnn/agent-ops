@@ -1,10 +1,11 @@
 #!/bin/bash
-# Offline tests for the per-worker Bash sandbox settings that session.sh passes with --settings.
+# Offline tests for the per-worker Bash sandbox settings that session.sh passes with --settings when WORKER_SANDBOX=1.
 set -u
 . "$(dirname "$0")/lib.sh"
 settings() { sed -n 's/.*--settings \([^ ]*\).*/\1/p' "$1" | tail -1; }  # the settings file of the last run in a log
 sb() { python3 -c 'import json,sys; s=json.load(open(sys.argv[1]))["sandbox"]; print(s["enabled"], s["failIfUnavailable"], s["allowUnsandboxedCommands"], s["enableWeakerNetworkIsolation"]); print("\n".join(s["filesystem"]["allowWrite"]))' "$1"; }
 S=$SB  # the real session.sh: lib.sh's $S adds --no-sandbox for the tests of other features
+echo 'WORKER_SANDBOX="1"' >>"$AGENT_OPS_HOME/config"  # the sandbox is opt-in
 G="$TMP/repo"; mkdir -p "$G"; git -C "$G" init -q; git -C "$G" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 tree() { git -C "$G" worktree add -q "$1" -b "t/$(basename "$1")" HEAD && (cd "$1" && pwd -P); }  # a linked worktree, as the launcher makes them
 W=$(tree "$V/worktrees/s"); mkdir -p "$V/venvs/s"; X=$(cd "$V/venvs/s" && pwd -P)

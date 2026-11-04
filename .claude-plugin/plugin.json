@@ -1,7 +1,7 @@
 {
   "name": "agent-ops",
   "version": "0.2.0",
-  "description": "Coordinator/worker workflow: router heartbeat, one worker per ticket, structured reports, guard hooks.",
+  "description": "Coordinator/worker workflow: router heartbeat, one worker per ticket, structured reports, one kill guard hook.",
   "author": {
     "name": "Yimin Liu"
   }
