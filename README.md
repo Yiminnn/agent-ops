@@ -11,7 +11,7 @@ Taken from [`deepseek-ai/dsh-superagent-prototype`](https://github.com/deepseek-
 | Router | a coordinator session with `skills/heartbeat` | Evaluates events, creates work, replies, reviews through agents, merges. Never writes code. Takes as little human attention as possible |
 | Executor | one `claude -p` per ticket, from `bin/session.sh`, with `skills/worker` | Does the work in its own directory. Ends with `STATUS: ready\|waiting\|blocked\|failed` |
 | Reviewers | `agents/pr-reviewer`, `delta-reviewer`, `experiment-reviewer` | Round 1 full; round 2 on: delta and must-fix only; experiments: recompute from raw |
-| Health check | `scripts/watchdog.sh` under launchd, no Claude | Alerts when the heartbeat is over 90 minutes old |
+| Health check | `scripts/watchdog.sh` under launchd, no Claude | Alerts when the last finished tick (`state/heartbeat.done`) is over 90 minutes old, or failed |
 | Recovery | `session.sh recover` | Lists runs with no clean end; `--go` resumes them with a note to check the worktree, git log and PR before it repeats an outside action |
 | Handover | `skills/handoff`, heartbeat rule | A new coordinator ticks once, in full, before the old one stops |
 
@@ -25,7 +25,7 @@ State stays outside the plugin, in `~/.claude/agent-templates` (or `$AGENT_OPS_H
 2. Create `LOGS_DIR`. A launch refuses if it is missing, so a wiped drive stays visible.
 3. Worker: `bin/session.sh launch <team profile> <name> <prompt-file> --worktree <dir> --repo <checkout> --base origin/<base>`. Launch, resume, recover and a queued resume all pass `--plugin-dir <this dir>` and `AGENT_OPS_ROLE=worker`; only `AGENT_OPS_PLUGIN=0` turns that off. Registry column 9 records what the last launch did. The run header in the log names the plugin revision and CLI version, and the SessionStart hook adds a `plugin loaded` line (hooks run outside the Bash sandbox, so the log dir needs no `--write`); `status` and `check.sh` flag a plugin run without that line (`PLUGIN NOT LOADED`). The first plugin resume of an older row tells the worker to load `agent-ops:worker`. Tell a new worker to load it too.
 4. Coordinator: `AGENT_OPS_ROLE=coordinator claude --plugin-dir <this dir>`, then `/agent-ops:heartbeat`.
-5. Watchdog: fill in `scripts/*.plist.template`, copy it to `~/Library/LaunchAgents/`, `launchctl load`. It needs `AGENT_OPS_ALERT_CMD <message>`, a command that works with no Claude session. With none it only writes `state/watchdog.alert`, and nobody is told.
+5. Watchdog: fill in `scripts/*.plist.template`, copy it to `~/Library/LaunchAgents/`, `launchctl load`. It needs `AGENT_OPS_ALERT_CMD <message>`, a command that works with no Claude session. With none it only writes `state/watchdog.alert`, and nobody is told. It judges `state/heartbeat.done`, which the heartbeat skill writes at the end of every tick (`<UTC> ok` or `<UTC> failed: <reason>`), not `heartbeat.last`, which `check.sh` touches at Probe, before the tick has done its work. It alerts once per episode when that file is older than `AGENT_OPS_WATCHDOG_MINUTES` (default 90) or its last line says `failed:`. Until the first `heartbeat.done` exists, after an upgrade, it judges `heartbeat.last` and says so in the alert. `state/heartbeat.stopped` silences it.
 
 Needs Claude Code 2.1.295 or later (`onFailure`), `python3`, `jq`, `gh`, macOS.
 

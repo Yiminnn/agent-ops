@@ -112,14 +112,20 @@ touch "$TMP/home/state/handoff-2026-01-01.md"; printf '## Freeze\n- dev: open\n#
 expect 'start worker silent' "$(SS worker)" ""; O=$(SS coordinator); has 'start handoff' "$O" 'handoff-2026-01-01.md'; has 'start locks' "$O" '- prod: none'; has 'start status' "$O" 'w3'; hasnt 'start owners' "$O" 'Owners'
 has 'start on resume too' "$(SS coordinator resume)" 'handoff-2026-01-01.md'
 
-# Watchdog
-D="$ROOT/scripts/watchdog.sh"; LAST="$TMP/home/state/heartbeat.last"; AL="$TMP/alerts"; rm -f "$TMP/home/state/watchdog."*
+# Watchdog: judges heartbeat.done (end of a tick); heartbeat.last (Probe, start of a tick) only until the first done exists
+D="$ROOT/scripts/watchdog.sh"; LAST="$TMP/home/state/heartbeat.last"; DONE="$TMP/home/state/heartbeat.done"; AL="$TMP/alerts"; rm -f "$TMP/home/state/watchdog."* "$DONE"
 WD() { AGENT_OPS_ALERT_CMD="$TMP/bin/alert" "$D"; }; printf '#!/bin/bash\necho "$1" >>"%s"\n' "$AL" >"$TMP/bin/alert"; chmod +x "$TMP/bin/alert"
-touch "$LAST"; WD; expect 'fresh no alert' "$(cat "$AL" 2>/dev/null)" ""
-touch -t 202001010000 "$LAST"; WD; has 'stale alerts' "$(cat "$AL")" 'heartbeat'; WD; expect 'alert once' "$(wc -l <"$AL" | tr -d ' ')" 1
-touch "$LAST"; WD; touch -t 202001010000 "$LAST"; WD; expect 'second episode' "$(wc -l <"$AL" | tr -d ' ')" 2
-rm -f "$TMP/home/state/watchdog.alerted"; touch "$TMP/home/state/heartbeat.stopped"; WD; expect 'intentional stop' "$(wc -l <"$AL" | tr -d ' ')" 2; rm "$TMP/home/state/heartbeat.stopped"
-"$D" 2>/dev/null; expect 'no alert cmd exits 3' "$?" 3; has 'alert file' "$(cat "$TMP/home/state/watchdog.alert")" 'heartbeat'
+N() { cat "$AL" 2>/dev/null | wc -l | tr -d ' '; }; OLD() { touch -t 202001010000 "$1"; }
+touch "$LAST"; WD; expect 'no done, fresh last: no alert' "$(N)" 0
+OLD "$LAST"; WD; has 'no done, stale last alerts' "$(cat "$AL")" 'heartbeat'; has 'fallback named' "$(cat "$AL")" 'no heartbeat.done yet'; WD; expect 'alert once' "$(N)" 1
+touch "$LAST"; WD; OLD "$LAST"; WD; expect 'second episode' "$(N)" 2
+touch "$LAST"; echo '2026-11-03T10:00Z ok' >"$DONE"; WD; expect 'fresh done: no alert' "$(N)" 2
+OLD "$DONE"; touch "$LAST"; WD; expect 'stale done alerts, fresh last' "$(N)" 3; hasnt 'no fallback note' "$(tail -1 "$AL")" 'no heartbeat.done yet'; WD; expect 'stale done once' "$(N)" 3
+echo '2026-11-03T11:00Z ok' >"$DONE"; WD; echo '2026-11-03T12:00Z failed: slack 500' >"$DONE"; WD; has 'failed alerts' "$(tail -1 "$AL")" 'last tick failed: slack 500'
+WD; expect 'failed once' "$(N)" 4; echo '2026-11-03T13:00Z ok' >"$DONE"; WD; echo '2026-11-03T14:00Z failed: x' >"$DONE"; WD; expect 'failed second episode' "$(N)" 5
+rm -f "$TMP/home/state/watchdog.alerted"; touch "$TMP/home/state/heartbeat.stopped"; WD; expect 'stopped: failed silent' "$(N)" 5
+OLD "$DONE"; WD; expect 'stopped: stale silent' "$(N)" 5; rm "$TMP/home/state/heartbeat.stopped"
+echo '2026-11-03T15:00Z ok' >"$DONE"; OLD "$DONE"; "$D" 2>/dev/null; expect 'no alert cmd exits 3' "$?" 3; has 'alert file' "$(cat "$TMP/home/state/watchdog.alert")" 'heartbeat'
 
 bash "$(dirname "$0")/regress.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/sandbox.sh" || fail=$((fail+1))
