@@ -18,6 +18,7 @@ DEPLOY_REPO="o/app"
 DEPLOY_BRANCH="dev"
 BOT_REVIEWERS="codex"
 SSO_PROFILES="p"
+DRIFT_SUMMARY_HOUR_UTC=24  # no daily drift summary in tests that read the real clock; tests/drift.sh tests it
 CONF
 pass=0; fail=0
 ok() { pass=$((pass+1)); }

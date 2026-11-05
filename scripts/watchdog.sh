@@ -32,6 +32,7 @@ weekend = sum((t.date() + dt.timedelta(days=d)).weekday() >= 5 for d in range(1,
 if now - t - dt.timedelta(days=weekend) > dt.timedelta(hours=30): print(f"agent-ops: no drift audit since {ts} (over 30 working hours).")
 EOF
 )
+arc=$?; [ "$arc" = 0 ] || [ -n "$audit" ] || audit="agent-ops: watchdog audit check failed (python3 exit $arc); the drift audit is not judged."  # a crash is not all clear
 if [ -z "$audit" ]; then rm -f "$S/watchdog.audit-alerted"; elif [ "$(cat "$S/watchdog.audit-alerted" 2>/dev/null)" != "$audit" ]; then alert "$audit" "$S/watchdog.audit-alerted"; fi
 [ -f "$S/heartbeat.stopped" ] && exit "$rc"
 if [ -f "$DONE" ]; then REF=$DONE; note=""; else REF="$S/heartbeat.last"; note=" (no heartbeat.done yet, judged by heartbeat.last)"; fi

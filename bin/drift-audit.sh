@@ -36,7 +36,7 @@ try: lines = open(rep).read().splitlines()
 except OSError: sys.exit("no report at " + rep)
 blocks, unknown, cov, cur = [], [], None, None
 for l in lines:
-    if l.startswith("DECISION:"):
+    if "DECISION:" in l:  # a decorated **DECISION:** or - DECISION: fails here; it must not drop out as a continuation line
         m = re.fullmatch(r"DECISION: (DEF-\d+) (checkpoint-missed|unattended|off-goal-work|unverified-claim|scope-change|other)", l.strip())
         if not m: sys.exit(f"bad DECISION line: {l.strip()[:80]}")
         cur = [m.group(1) + " " + m.group(2), [l]]; blocks.append(cur)

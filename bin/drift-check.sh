@@ -52,7 +52,7 @@ def alive(pid):
 
 latest, tagged, dispatches = {}, {}, []  # name -> last row; name -> last dispatch goal; dispatch rows
 reg = read("sessions.tsv")
-try: since = dt.datetime.fromtimestamp(os.path.getmtime(os.path.join(st, "drift-check.last")), dt.timezone.utc)
+try: since = dt.datetime.fromtimestamp(int(os.path.getmtime(os.path.join(st, "drift-check.last"))), dt.timezone.utc)  # registry times are whole seconds
 except OSError: since = now - dt.timedelta(hours=24)
 for l in reg or []:
     f = l.split("\t") + [""] * 13
@@ -61,7 +61,7 @@ for l in reg or []:
         tagged[f[0]] = f[11]
         try: t = dt.datetime.fromisoformat(f[6].replace("Z", "+00:00"))
         except ValueError: continue
-        if t > since: dispatches.append(f)
+        if t >= since: dispatches.append(f)  # a dispatch in the boundary second shows on both ticks; check.sh prints it once
 live = {n for n, f in latest.items() if alive(f[3])}
 
 pend = read("pending.md")
@@ -74,14 +74,15 @@ for l in pend or []:
     acted |= {"DEF-" + n for n in re.findall(r"\bDEF[- ](\d+)\b", l)}
 
 def merged_prs(g):
-    n, found = g.removeprefix("DEF-"), []
+    n, found, failed = g.removeprefix("DEF-"), [], False
     for repo in os.environ["GH_REPOS"].split():
         r = subprocess.run(["gh", "pr", "list", "-R", repo, "--state", "merged", "-L", "30", "--search", f'"DEF {n}" OR {g}',
                             "--json", "number,title,body,mergedAt,url"], capture_output=True, text=True)
         try: prs = json.loads(r.stdout) if r.returncode == 0 else None
         except ValueError: prs = None
-        if prs is None: unknown.append(f"gh pr list {repo} {g}"); continue
+        if prs is None: unknown.append(f"gh pr list {repo} {g}"); failed = True; continue
         found += [(p["mergedAt"], f"{repo}#{p['number']}") for p in prs if re.search(rf"\bDEF[- ]{n}\b", p["title"] + " " + (p["body"] or ""))]
+    if failed: return "merged PRs unknown (gh failed)"  # not "none": the line must not change on a gh flake
     found.sort(reverse=True)
     return f"{len(found)} merged PRs name it, latest {found[0][1]} at {found[0][0][:10]}" if found else "no merged PR names it"
 
