@@ -41,7 +41,7 @@ has 'recover resumes without a tag' "$("$R" recover --go g5 2>&1)" 'resumed g5'
 mkdir -p "$TMP/bin"; GHLOG="$TMP/gh.log"
 cat >"$TMP/bin/gh" <<'GH'
 #!/bin/bash
-echo "$*" >>"$GHLOG"; [ -n "${GH_FAIL:-}" ] && exit 1
+echo "$*" >>"$GHLOG"; [ -n "${GH_FAIL:-}" ] && exit 1; [ -n "${GH_FAIL_MERGED:-}" ] && [[ " $* " == *" --state merged "* ]] && exit 1
 case " $* " in *" -R o/app "*DEF-950*) echo '[{"number":12,"title":"planner persistence","body":"DEF 950","mergedAt":"2026-11-01T10:00:00Z","url":"https://github.com/o/app/pull/12"},{"number":13,"title":"x","body":"DEF 9501","mergedAt":"2026-11-02T10:00:00Z","url":"u13"}]' ;; *) echo '[]' ;; esac
 GH
 chmod +x "$TMP/bin/gh"; export GHLOG
@@ -49,7 +49,7 @@ DC() { PATH="$TMP/bin:$PATH" AGENT_OPS_NOW=${NOW:-2026-11-03T18:00:00Z} "$ROOT/b
 rm -f "$CM"; O=$(DC); expect 'missing commitments exits 2' "$?" 2; has 'missing commitments UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments.md'
 commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
 O=$(DC); expect 'missing pending exits 2' "$?" 2; has 'missing pending UNKNOWN' "$O" 'DRIFT UNKNOWN: pending.md'
-: >"$ST/pending.md"; touch "$ST/drift-check.last"; sleep 1
+: >"$ST/pending.md"; sleep 1; touch "$ST/drift-check.last"; sleep 1  # the watermark second counts: keep earlier launches out of it
 STUB_SLEEP=30 "$R" launch team t1 "$P" --no-sandbox --goal DEF-900 --expect 'tooling PR' >/dev/null
 O=$(DC); expect 'clean exits 0' "$?" 0; expect 'clean is silent' "$O" ''
 "$R" launch team o1 "$P" --no-sandbox --ops 'review PR 7' >/dev/null
@@ -69,10 +69,12 @@ echo '- ask Yimin about the budget' >"$ST/pending.md"; has 'pending with no foll
 hasnt 'named live executor attends' "$(DC)" 'UNATTENDED'
 commit 'DEF-950|Planner|Yimin|plan persisted|persistence test|2099-01-01|o1'; has 'named executor not running' "$(DC)" 'executor o1 not running'
 commit 'DEF-950|Planner|Yimin|plan persisted|persistence test|2026-11-02|t1'
-O=$(GH_FAIL=1 DC); expect 'gh failure exits 2' "$?" 2; has 'gh failure UNKNOWN' "$O" 'DRIFT UNKNOWN: gh pr list o/app DEF-950'
+O=$(GH_FAIL=1 DC); expect 'gh failure exits 2' "$?" 2; has 'gh failure UNKNOWN' "$O" 'DRIFT UNKNOWN: gh pr list o/app DEF-950'; has 'gh failure: evidence unknown' "$O" 'merged PRs unknown'
 commit 'DEF-950|Planner|Yimin|plan persisted|persistence test|soon|t1'; has 'bad checkpoint UNKNOWN' "$(DC)" 'DRIFT UNKNOWN: checkpoint of DEF-950'
-touch "$ST/drift-check.last"; commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
+sleep 1; touch "$ST/drift-check.last"; commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
 hasnt 'since the last check only' "$(DC)" 'DISPATCH'
+TZ=UTC touch -t 202611031200.00 "$ST/drift-check.last"; printf 'w9\tteam\tsid\t0\tp\tl\t2026-11-03T12:00:00Z\t\t\t\t\tops\tsame second\n' >>"$REG"
+has 'a dispatch in the watermark second counts' "$(DC)" 'DRIFT DISPATCH ops w9'; touch "$ST/drift-check.last"
 GEN=2026-11-03T15:59Z commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
 O=$(DC); expect 'stale cache exits 2' "$?" 2; has 'stale cache UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments cache stale (generated 2026-11-03T15:59Z)'
 GEN=2026-11-03T16:01Z commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'; hasnt 'cache under 2 h is fresh' "$(DC)" 'stale'
@@ -91,13 +93,39 @@ hasnt 'replay: tooling is attended' "$O" 'DEF-990'; hasnt 'replay: no dispatch l
 kill "$LIVE" 2>/dev/null
 
 # check.sh carries the drift lines in its snapshot; a dispatch line going away is not news; a broken drift-check is UNKNOWN
-printf '#!/bin/bash\nexit 0\n' >"$TMP/bin/aws"; chmod +x "$TMP/bin/aws"; CK() { PATH="$TMP/bin:$PATH" AGENT_OPS_NOW=2026-11-03T18:00:00Z "$ROOT/bin/check.sh"; }
+sed -i "" "/^DRIFT_SUMMARY_HOUR_UTC=/d" "$TMP/home/config"  # the default hour, 13Z, from here on
+printf '#!/bin/bash\nexit 0\n' >"$TMP/bin/aws"; chmod +x "$TMP/bin/aws"; CK() { PATH="$TMP/bin:$PATH" AGENT_OPS_NOW=${CNOW:-2026-11-03T18:00:00Z} "$ROOT/bin/check.sh"; }
 rm -f "$ST/heartbeat.last"; touch -t 202001010000 "$ST/drift-check.last"; "$R" launch team o2 "$P" --no-sandbox --ops 'merge PR 9' >/dev/null
 O=$(CK); has 'check prints drift' "$O" 'DRIFT UNATTENDED DEF-1006'; has 'check prints dispatch' "$O" 'DRIFT DISPATCH ops o2'
 expect 'check touches drift-check.last' "$(find "$ST/drift-check.last" -mmin -1)" "$ST/drift-check.last"
 O=$(CK); hasnt 'old dispatch is not GONE news' "$O" 'GONE DRIFT DISPATCH'; expect 'then no change' "$(CK)" 'NO CHANGE'
 mv "$CM" "$CM.away"; O=$(CK); has 'check shows UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments.md'; mv "$CM.away" "$CM"
 cp "$CM" "$CM.ok"; printf '\xff\xfe' >>"$CM"; O=$(CK); mv "$CM.ok" "$CM"; has 'crashed drift-check is UNKNOWN' "$O" 'DRIFT UNKNOWN: drift-check.sh exit 1'
+
+# Drift news: a DRIFT line prints when its item (kind + DEF, pending line, UNKNOWN input) is new or its text changed
+CK >/dev/null; expect 'open drift repeats nothing' "$(CK)" 'NO CHANGE'
+cp "$CM" "$CM.ok"; sed -i '' 's/a test that restarts the planner and reads the plan back/a restart test/' "$CM"; O=$(CK)
+has 'changed item printed again' "$O" 'NEW DRIFT CHECKPOINT DEF-1006 B6 planner: checkpoint 2026-11-02 passed, next proof "a restart test"'
+hasnt 'its old text is not GONE news' "$O" 'GONE DRIFT CHECKPOINT DEF-1006'; hasnt 'unchanged item not printed' "$O" 'DEF-1008'
+mv "$CM.ok" "$CM"; CK >/dev/null
+cp "$ST/pending.md" "$ST/pending.ok"; X=$(printf 'x%.0s' {1..130})
+printf -- '- %s row A | follow-up 2026-11-01\n- %s row B | follow-up 2026-11-01\n- Liz | the budget | follow-up 2026-11-01\n- Liz | the budget | follow-up 2026-11-02\n' "$X" "$X" >>"$ST/pending.md"
+O=$(CK); has 'long pending rows both print' "$O" 'row B'; expect 'pending rows with one prefix, or that differ only in dates, stay quiet' "$(CK)" 'NO CHANGE'
+mv "$ST/pending.ok" "$ST/pending.md"; CK >/dev/null
+O=$(GH_FAIL_MERGED=1 CK); has 'partial gh flake is UNKNOWN' "$O" 'NEW DRIFT UNKNOWN: gh pr list'; hasnt 'its evidence text is not news' "$O" 'DRIFT CHECKPOINT'
+O=$(CK); has 'recovery clears the UNKNOWN' "$O" 'GONE DRIFT UNKNOWN: gh pr list'; hasnt 'recovered evidence is not news' "$O" 'DRIFT CHECKPOINT'
+
+# Daily summary: the first tick at or after DRIFT_SUMMARY_HOUR_UTC (default 13) on a UTC day lists every open item
+CNOW=2026-11-04T12:59:00Z CK >/dev/null; O=$(CNOW=2026-11-04T12:59:30Z CK); expect 'no summary before 13Z' "$O" 'NO CHANGE'
+O=$(CNOW=2026-11-04T13:00:00Z CK); expect 'summary heads the output' "$(head -1 <<<"$O")" 'DRIFT SUMMARY 2026-11-04: 6 open'
+has 'summary lists an unchanged item' "$O" $'\nDRIFT UNATTENDED DEF-1006 B6 planner'
+expect 'once per day' "$(CNOW=2026-11-04T17:00:00Z CK)" 'NO CHANGE'
+O=$(CNOW=2026-11-05T13:10:00Z CK); has 'next day again' "$O" 'DRIFT SUMMARY 2026-11-05: 7 open'; has 'summary lists the overdue pending' "$O" $'\nDRIFT PENDING overdue 2026-11-04'
+echo 'DRIFT_SUMMARY_HOUR_UTC=7' >>"$TMP/home/config"; has 'hour from the config' "$(CNOW=2026-11-06T07:00:00Z CK)" 'DRIFT SUMMARY 2026-11-06'
+sed -i "" "/^DRIFT_SUMMARY_HOUR_UTC=7/d" "$TMP/home/config"
+cp "$CM" "$CM.ok"; GEN=2026-11-09T13:00Z commit; O=$(CNOW=2026-11-09T13:30:00Z CK); S=$(sed '/^CHANGED:/,$d' <<<"$O")
+hasnt 'no committed goals is not an open item' "$S" 'NONE'; has 'it is said once as news' "$O" 'NEW DRIFT NONE committed'; has 'summary count without it' "$S" 'DRIFT SUMMARY 2026-11-09: 1 open'
+mv "$CM.ok" "$CM"
 
 # drift-audit.sh: one fresh read-only worker per working day; it writes drift-audit.md, the script judges it, writes
 # drift-audit.done and alerts only on a new decision or UNKNOWN (deduped by goal + reason)
@@ -130,6 +158,11 @@ UNK='UNKNOWN: Linear status of DEF-1008 (MCP not connected)' rep; AU 2026-11-10T
 RUN=true AU 2026-11-11T13:30:00Z; has 'no report: failed' "$(cat "$AD")" 'failed: no report'
 rep 'DEF-1 other' 'DEF-2 other' 'DEF-3 other' 'DEF-4 other'; AU 2026-11-12T13:30:00Z; has 'over 3 decisions: failed' "$(cat "$AD")" 'failed: 4 decisions'
 rep 'DEF-1006 bogus-reason'; AU 2026-11-13T13:30:00Z; has 'unknown reason code: failed' "$(cat "$AD")" 'failed: bad DECISION line'
+rep; sed -i "" 's/^COVERAGE/**DECISION:** DEF-1006 unattended\nCOVERAGE/' "$TMP/rep.md"; AU 2026-11-13T15:00:00Z; has 'decorated DECISION: failed' "$(cat "$AD")" 'failed: bad DECISION line: **DECISION:**'
+n=0; for d in '## DECISION:' '1. DECISION:' '`DECISION:'; do n=$((n+1))
+  rep; sed -i "" "s/^COVERAGE/$d DEF-1006 unattended\nCOVERAGE/" "$TMP/rep.md"; AU 2026-11-13T15:1${n}:00Z; has "marked $d: failed" "$(cat "$AD")" "failed: bad DECISION line: $d"; done
+rep 'DEF-1006 unattended'; sed -i "" "s/^WRONG: w DEF-1006 unattended/WRONG: yesterday's DECISION: DEF-3 unattended was sent\nthe DECISION: was sent by mail/" "$TMP/rep.md"; AU 2026-11-13T16:00:00Z
+expect 'DECISION: inside prose is fine' "$(cat "$AD")" '2026-11-13T16:00Z ok'
 { echo '# x'; } >"$TMP/rep.md"; AU 2026-11-16T13:30:00Z; has 'no coverage: failed' "$(cat "$AD")" 'failed: no COVERAGE line'
 rep 'DEF-1008 unattended'; ALERT= AU 2026-11-17T13:30:00Z; has 'no alert command: failed' "$(cat "$AD")" 'failed: no AGENT_OPS_ALERT_CMD'
 AU 2026-11-17T15:00:00Z; expect 'a failed day retries and sends' "$(cat "$AD")" '2026-11-17T15:00Z ok'; has 'sent after retry' "$(tail -8 "$AL")" 'DEF-1008 unattended'
@@ -151,5 +184,6 @@ WD 2026-11-10T14:30:00Z; expect 'failed once' "$(nw)" 4
 echo '2026-11-11T13:30Z ok' >"$AD"; WD 2026-11-11T14:00:00Z; echo '2026-11-12T13:30Z failed: launch: x' >"$AD"; WD 2026-11-12T14:00:00Z; expect 'second failure episode' "$(nw)" 5
 touch "$ST/heartbeat.stopped"; echo '2026-11-13T13:30Z ok' >"$AD"; WD 2026-11-13T14:00:00Z; echo '2026-11-13T15:00Z failed: y' >"$AD"; WD 2026-11-13T16:00:00Z
 expect 'audit check runs with the heartbeat stopped' "$(nw)" 6; rm -f "$ST/heartbeat.stopped"
+echo '2026-11-16T13:30Z ok' >"$AD"; WD 2026-11-16T14:00:00Z; WD not-a-date; expect 'a crashed audit check alerts' "$(nw)" 7; has 'crash text' "$(tail -1 "$WAL")" 'watchdog audit check failed (python3 exit 1)'
 
 echo "drift pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

@@ -15,7 +15,7 @@ Taken from [`deepseek-ai/dsh-superagent-prototype`](https://github.com/deepseek-
 | Recovery | `session.sh recover` | Lists runs with no clean end; `--go` resumes them with a note to check the worktree, git log and PR before it repeats an outside action |
 | Handover | `skills/handoff`, heartbeat rule | A new coordinator ticks once, in full, before the old one stops |
 | Dispatch gate | `session.sh launch`/`resume` | Every dispatch names `--goal DEF-n --expect "<result>"` (a row in `state/commitments.md`) or `--ops "<reason>"`; a resume of the same work says `--continue`. Registry columns 12-13 |
-| Drift check | `bin/drift-check.sh`, no model, inside `check.sh` | Passed checkpoints, unattended or incomplete commitments, ops or uncommitted dispatches, overdue pending items; `UNKNOWN` on a missing input or a stale commitments cache, never an all clear |
+| Drift check | `bin/drift-check.sh`, no model, inside `check.sh` | Passed checkpoints, unattended or incomplete commitments, ops or uncommitted dispatches, overdue pending items; `UNKNOWN` on a missing input or a stale commitments cache, never an all clear. An item prints when new or changed, and all open items once a day (`DRIFT SUMMARY`, after `DRIFT_SUMMARY_HOUR_UTC`) |
 | Drift audit | `bin/drift-audit.sh` under launchd, one fresh read-only worker per working day | At most 3 decisions with evidence and a coverage line, sent only when new; recommends, never acts. The watchdog alerts when it is late or failed |
 
 `bin/check.sh` is the read-only probe. `bin/merge-when-green.sh` merges only the reviewed head, and says `merged` only after GitHub does.
