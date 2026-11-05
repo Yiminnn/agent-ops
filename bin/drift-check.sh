@@ -13,7 +13,7 @@
 #                                           the one line then: every dispatch is ops, so no DISPATCH lines
 # Exit 0 with no lines or only the NONE line, 1 with exceptions, 2 with an UNKNOWN. A merged PR is listed as evidence; it does not clear a
 # passed checkpoint: the accountable human accepts the proof and moves the checkpoint in the Linear issue.
-# check.sh prints these lines and touches state/drift-check.last after it keeps a snapshot. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
+# check.sh prints these lines; it touches state/drift-check.next before this read and renames it to drift-check.last after it keeps a snapshot. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
 set -u
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"
 [ -f "$T/config" ] || { echo "DRIFT UNKNOWN: config ($T/config)"; exit 2; }
@@ -69,8 +69,8 @@ acted = set()  # DEF ids with a human next action whose follow-up has not passed
 for l in pend or []:
     if not l.strip() or l.lstrip().startswith("#"): continue
     m = re.search(r"follow-up:?\s*(\d{4}-\d{2}-\d{2})", l)
-    if not m: out.append(f"DRIFT PENDING no follow-up: {l.strip()[:120]}"); continue
-    if dt.date.fromisoformat(m.group(1)) < today: out.append(f"DRIFT PENDING overdue {m.group(1)}: {l.strip()[:120]}"); continue
+    if not m: out.append(f"DRIFT PENDING no follow-up: {l.strip()}"); continue
+    if dt.date.fromisoformat(m.group(1)) < today: out.append(f"DRIFT PENDING overdue {m.group(1)}: {l.strip()}"); continue
     acted |= {"DEF-" + n for n in re.findall(r"\bDEF[- ](\d+)\b", l)}
 
 def merged_prs(g):
@@ -82,7 +82,7 @@ def merged_prs(g):
         except ValueError: prs = None
         if prs is None: unknown.append(f"gh pr list {repo} {g}"); failed = True; continue
         found += [(p["mergedAt"], f"{repo}#{p['number']}") for p in prs if re.search(rf"\bDEF[- ]{n}\b", p["title"] + " " + (p["body"] or ""))]
-    if failed: return "merged PRs unknown (gh failed)"  # not "none": the line must not change on a gh flake
+    if failed: return "merged PRs unknown (gh failed)"  # not "none" on a gh flake; check.sh leaves this evidence out of its comparison
     found.sort(reverse=True)
     return f"{len(found)} merged PRs name it, latest {found[0][1]} at {found[0][0][:10]}" if found else "no merged PR names it"
 

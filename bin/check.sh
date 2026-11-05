@@ -4,7 +4,7 @@
 # changed. It does not mean the tick finished: scripts/watchdog.sh reads state/heartbeat.done, written at the end of a
 # tick, and falls back to this file only until the first heartbeat.done exists.
 # The snapshot holds drift-check.sh's DRIFT lines, compared by item (kind + DEF id, the pending line, the UNKNOWN input):
-# NEW DRIFT when an item is new or its text changed, GONE DRIFT when it clears. Once a UTC day, on the first tick at or after
+# NEW DRIFT when an item is new or its text changed (a CHECKPOINT's merged-PR evidence aside), GONE DRIFT when it clears. Once a UTC day, on the first tick at or after
 # DRIFT_SUMMARY_HOUR_UTC (config, default 13; 24 turns it off), DRIFT SUMMARY <date>: <n> open heads the output with every open item;
 # state/drift-summary.last holds the day of the last one. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
 # Two kinds of line stay out of the snapshot and print on every tick until handled: NEW DELIVER <session> <hash8> <to> |
@@ -46,9 +46,11 @@ drift_news() {  # NEW DRIFT for an item that is new or whose text changed, GONE 
       if (l ~ /^DRIFT UNKNOWN: /) sub(/ \(.*/, "", k)
       return k }
     !/^DRIFT / { next }
-    FILENAME == ARGV[1] { old[key($0)] = $0; next }
-    { k = key($0); now[k] = 1; if (!(k in old) || old[k] != $0) print "NEW " $0 }
-    END { for (k in old) if (!(k in now) && old[k] !~ /^DRIFT DISPATCH /) print "GONE " old[k] }' "$1" "$2" | sort
+    { k = key($0); k = k SUBSEP (++n[FILENAME, k]) }  # items that share a key (same row twice, dates apart) pair up in order
+    { c = $0; if (c ~ /^DRIFT CHECKPOINT /) sub(/"; [^"]*$/, "\"", c) }  # its merged-PR evidence is not news
+    FILENAME == ARGV[1] { old[k] = c; line[k] = $0; next }
+    { now[k] = 1; if (!(k in old) || old[k] != c) print "NEW " $0 }
+    END { for (k in old) if (!(k in now) && line[k] !~ /^DRIFT DISPATCH /) print "GONE " line[k] }' "$1" "$2" | sort
 }
 if [ -f "$LAST" ]; then
   ch=$(diff <(grep -v '^DRIFT ' "$LAST") <(grep -v '^DRIFT ' "$NEW") | grep '^[<>]' | sed 's/^< /GONE /;s/^> /NEW /')
@@ -69,7 +71,7 @@ old=$(cat "$T/state/coordinator-plugin-rev" 2>/dev/null); rev=$(git -C "$HERE/..
 [ -n "$old" ] && [ -n "$rev" ] && [ "$old" != "$rev" ] && ch=${ch:+$ch$'\n'}"NEW SKILL STALE ${old}→${rev}"  # until the coordinator re-invokes its skills and writes $rev there
 now=${AGENT_OPS_NOW:-$(date -u +%FT%TZ)}; day=${now:0:10}; SUM="$T/state/drift-summary.last"  # the UTC day of the last summary
 if [ "$((10#${now:11:2}))" -ge "${DRIFT_SUMMARY_HOUR_UTC:-13}" ] && [ "$(cat "$SUM" 2>/dev/null)" != "$day" ]; then
-  open=$(grep '^DRIFT ' "$NEW" | grep -v '^DRIFT DISPATCH ')  # a dispatch is an event, not an open item
+  open=$(grep '^DRIFT ' "$NEW" | grep -v -e '^DRIFT DISPATCH ' -e '^DRIFT NONE committed$')  # a dispatch is an event; no committed goals is said once, as news
   echo "DRIFT SUMMARY $day: $(grep -c . <<<"$open") open"; [ -n "$open" ] && echo "$open"; echo "$day" >"$SUM"
 elif [ -z "$ch" ]; then echo "NO CHANGE"; fi
 [ -n "$ch" ] && { echo "CHANGED:"; echo "$ch"; }  # a dispatch line that only went away is no change

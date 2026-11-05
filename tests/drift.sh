@@ -41,7 +41,7 @@ has 'recover resumes without a tag' "$("$R" recover --go g5 2>&1)" 'resumed g5'
 mkdir -p "$TMP/bin"; GHLOG="$TMP/gh.log"
 cat >"$TMP/bin/gh" <<'GH'
 #!/bin/bash
-echo "$*" >>"$GHLOG"; [ -n "${GH_FAIL:-}" ] && exit 1
+echo "$*" >>"$GHLOG"; [ -n "${GH_FAIL:-}" ] && exit 1; [ -n "${GH_FAIL_MERGED:-}" ] && [[ " $* " == *" --state merged "* ]] && exit 1
 case " $* " in *" -R o/app "*DEF-950*) echo '[{"number":12,"title":"planner persistence","body":"DEF 950","mergedAt":"2026-11-01T10:00:00Z","url":"https://github.com/o/app/pull/12"},{"number":13,"title":"x","body":"DEF 9501","mergedAt":"2026-11-02T10:00:00Z","url":"u13"}]' ;; *) echo '[]' ;; esac
 GH
 chmod +x "$TMP/bin/gh"; export GHLOG
@@ -108,6 +108,12 @@ cp "$CM" "$CM.ok"; sed -i '' 's/a test that restarts the planner and reads the p
 has 'changed item printed again' "$O" 'NEW DRIFT CHECKPOINT DEF-1006 B6 planner: checkpoint 2026-11-02 passed, next proof "a restart test"'
 hasnt 'its old text is not GONE news' "$O" 'GONE DRIFT CHECKPOINT DEF-1006'; hasnt 'unchanged item not printed' "$O" 'DEF-1008'
 mv "$CM.ok" "$CM"; CK >/dev/null
+cp "$ST/pending.md" "$ST/pending.ok"; X=$(printf 'x%.0s' {1..130})
+printf -- '- %s row A | follow-up 2026-11-01\n- %s row B | follow-up 2026-11-01\n- Liz | the budget | follow-up 2026-11-01\n- Liz | the budget | follow-up 2026-11-02\n' "$X" "$X" >>"$ST/pending.md"
+O=$(CK); has 'long pending rows both print' "$O" 'row B'; expect 'pending rows with one prefix, or that differ only in dates, stay quiet' "$(CK)" 'NO CHANGE'
+mv "$ST/pending.ok" "$ST/pending.md"; CK >/dev/null
+O=$(GH_FAIL_MERGED=1 CK); has 'partial gh flake is UNKNOWN' "$O" 'NEW DRIFT UNKNOWN: gh pr list'; hasnt 'its evidence text is not news' "$O" 'DRIFT CHECKPOINT'
+O=$(CK); has 'recovery clears the UNKNOWN' "$O" 'GONE DRIFT UNKNOWN: gh pr list'; hasnt 'recovered evidence is not news' "$O" 'DRIFT CHECKPOINT'
 
 # Daily summary: the first tick at or after DRIFT_SUMMARY_HOUR_UTC (default 13) on a UTC day lists every open item
 CNOW=2026-11-04T12:59:00Z CK >/dev/null; O=$(CNOW=2026-11-04T12:59:30Z CK); expect 'no summary before 13Z' "$O" 'NO CHANGE'
@@ -117,6 +123,9 @@ expect 'once per day' "$(CNOW=2026-11-04T17:00:00Z CK)" 'NO CHANGE'
 O=$(CNOW=2026-11-05T13:10:00Z CK); has 'next day again' "$O" 'DRIFT SUMMARY 2026-11-05: 7 open'; has 'summary lists the overdue pending' "$O" $'\nDRIFT PENDING overdue 2026-11-04'
 echo 'DRIFT_SUMMARY_HOUR_UTC=7' >>"$TMP/home/config"; has 'hour from the config' "$(CNOW=2026-11-06T07:00:00Z CK)" 'DRIFT SUMMARY 2026-11-06'
 sed -i "" "/^DRIFT_SUMMARY_HOUR_UTC=7/d" "$TMP/home/config"
+cp "$CM" "$CM.ok"; GEN=2026-11-09T13:00Z commit; O=$(CNOW=2026-11-09T13:30:00Z CK); S=$(sed '/^CHANGED:/,$d' <<<"$O")
+hasnt 'no committed goals is not an open item' "$S" 'NONE'; has 'it is said once as news' "$O" 'NEW DRIFT NONE committed'; has 'summary count without it' "$S" 'DRIFT SUMMARY 2026-11-09: 1 open'
+mv "$CM.ok" "$CM"
 
 # drift-audit.sh: one fresh read-only worker per working day; it writes drift-audit.md, the script judges it, writes
 # drift-audit.done and alerts only on a new decision or UNKNOWN (deduped by goal + reason)
@@ -150,6 +159,8 @@ RUN=true AU 2026-11-11T13:30:00Z; has 'no report: failed' "$(cat "$AD")" 'failed
 rep 'DEF-1 other' 'DEF-2 other' 'DEF-3 other' 'DEF-4 other'; AU 2026-11-12T13:30:00Z; has 'over 3 decisions: failed' "$(cat "$AD")" 'failed: 4 decisions'
 rep 'DEF-1006 bogus-reason'; AU 2026-11-13T13:30:00Z; has 'unknown reason code: failed' "$(cat "$AD")" 'failed: bad DECISION line'
 rep; sed -i "" 's/^COVERAGE/**DECISION:** DEF-1006 unattended\nCOVERAGE/' "$TMP/rep.md"; AU 2026-11-13T15:00:00Z; has 'decorated DECISION: failed' "$(cat "$AD")" 'failed: bad DECISION line: **DECISION:**'
+rep 'DEF-1006 unattended'; sed -i "" "s/^WRONG: w DEF-1006 unattended/WRONG: yesterday's DECISION: DEF-3 unattended was sent/" "$TMP/rep.md"; AU 2026-11-13T16:00:00Z
+expect 'DECISION: inside prose is fine' "$(cat "$AD")" '2026-11-13T16:00Z ok'
 { echo '# x'; } >"$TMP/rep.md"; AU 2026-11-16T13:30:00Z; has 'no coverage: failed' "$(cat "$AD")" 'failed: no COVERAGE line'
 rep 'DEF-1008 unattended'; ALERT= AU 2026-11-17T13:30:00Z; has 'no alert command: failed' "$(cat "$AD")" 'failed: no AGENT_OPS_ALERT_CMD'
 AU 2026-11-17T15:00:00Z; expect 'a failed day retries and sends' "$(cat "$AD")" '2026-11-17T15:00Z ok'; has 'sent after retry' "$(tail -8 "$AL")" 'DEF-1008 unattended'
