@@ -159,7 +159,9 @@ RUN=true AU 2026-11-11T13:30:00Z; has 'no report: failed' "$(cat "$AD")" 'failed
 rep 'DEF-1 other' 'DEF-2 other' 'DEF-3 other' 'DEF-4 other'; AU 2026-11-12T13:30:00Z; has 'over 3 decisions: failed' "$(cat "$AD")" 'failed: 4 decisions'
 rep 'DEF-1006 bogus-reason'; AU 2026-11-13T13:30:00Z; has 'unknown reason code: failed' "$(cat "$AD")" 'failed: bad DECISION line'
 rep; sed -i "" 's/^COVERAGE/**DECISION:** DEF-1006 unattended\nCOVERAGE/' "$TMP/rep.md"; AU 2026-11-13T15:00:00Z; has 'decorated DECISION: failed' "$(cat "$AD")" 'failed: bad DECISION line: **DECISION:**'
-rep 'DEF-1006 unattended'; sed -i "" "s/^WRONG: w DEF-1006 unattended/WRONG: yesterday's DECISION: DEF-3 unattended was sent/" "$TMP/rep.md"; AU 2026-11-13T16:00:00Z
+n=0; for d in '## DECISION:' '1. DECISION:' '`DECISION:'; do n=$((n+1))
+  rep; sed -i "" "s/^COVERAGE/$d DEF-1006 unattended\nCOVERAGE/" "$TMP/rep.md"; AU 2026-11-13T15:1${n}:00Z; has "marked $d: failed" "$(cat "$AD")" "failed: bad DECISION line: $d"; done
+rep 'DEF-1006 unattended'; sed -i "" "s/^WRONG: w DEF-1006 unattended/WRONG: yesterday's DECISION: DEF-3 unattended was sent\nthe DECISION: was sent by mail/" "$TMP/rep.md"; AU 2026-11-13T16:00:00Z
 expect 'DECISION: inside prose is fine' "$(cat "$AD")" '2026-11-13T16:00Z ok'
 { echo '# x'; } >"$TMP/rep.md"; AU 2026-11-16T13:30:00Z; has 'no coverage: failed' "$(cat "$AD")" 'failed: no COVERAGE line'
 rep 'DEF-1008 unattended'; ALERT= AU 2026-11-17T13:30:00Z; has 'no alert command: failed' "$(cat "$AD")" 'failed: no AGENT_OPS_ALERT_CMD'
