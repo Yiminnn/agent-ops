@@ -7,6 +7,7 @@
 #   session.sh recover [--go] [--personal-ok] [<name>...]    # list interrupted rows; --go resumes them
 #   session.sh status [--all]                                # registry + live pid + log age + final STATUS
 #   session.sh orgcheck                                      # ORG CHANGED lines, for check.sh
+#   session.sh delivers                                      # DELIVER lines of finished sessions, for check.sh
 #   session.sh log <name> [bytes]                            # tail of the session's log
 #
 # Registry: ~/.claude/agent-templates/state/sessions.tsv
@@ -166,6 +167,30 @@ status)
     st=""; [ "$state" = done ] && [[ "$pid" != waiting:* ]] && st=$(final_status "$log")
     printf '%-28s %-8s %-5s %-8s %-8s log %-6s %s %s %s\n' "$name" "$state" "$profile" "$team" "$p" "$age" "${sid:0:8}" "$st" "$(plugin_unseen "$log")"
   done
+  ;;
+delivers)  # open|expired|malformed<TAB>name<TAB>hash8<TAB>text, for the DELIVER lines of sessions not running
+  # Keyed by sha1("<to>|<what>")[:8], trimmed, so a resumed worker's repeated line keeps its key; the path of the last line
+  # with a key wins (a newer draft). A log last changed 7-30 days ago gives expired lines; an older log is not read.
+  # A line with no | is malformed, keyed by the sha1 of the whole line.
+  latest | tr '\t' '\037' | while IFS=$'\037' read -r name profile sid pid prompt log _; do
+    alive "$pid" && continue
+    if [ -n "$(find "$log" -mmin -10080 2>/dev/null)" ]; then printf 'open\t%s\t%s\n' "$name" "$log"
+    elif [ -n "$(find "$log" -mmin -43200 2>/dev/null)" ]; then printf 'expired\t%s\t%s\n' "$name" "$log"; fi
+  done | python3 -c '
+import hashlib, sys
+h8 = lambda t: hashlib.sha1(t.encode()).hexdigest()[:8]
+out = {}  # (name, hash8) -> row; a later line replaces the text, the first keeps the place
+for l in sys.stdin:
+    kind, name, log = l.rstrip("\n").split("\t", 2)
+    try: lines = open(log, errors="replace").read().splitlines()
+    except OSError: continue  # an unreadable log must not fail the probe
+    for d in lines:
+        if not d.startswith("DELIVER: "): continue
+        if "|" not in d: out[name, h8(d)] = ("malformed" if kind == "open" else kind, d); continue
+        c = [x.strip() for x in d[9:].split("|")] + ["", "-"]
+        out[name, h8(f"{c[0]}|{c[1]}")] = (kind, f"{c[0]} | {c[1]} | {c[2] or chr(45)}")
+for (name, h), (kind, text) in out.items(): print(f"{kind}\t{name}\t{h}\t{text}")
+'
   ;;
 orgcheck)  # stable text: check.sh diffs these lines between ticks
   awk -F'\t' '{o[$2]=$8} END {for (p in o) print p "\t" o[p]}' "$REG" | sort | while IFS=$'\t' read -r p old; do

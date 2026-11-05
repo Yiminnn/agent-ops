@@ -18,6 +18,7 @@ You own one ticket, in your own worktree. The coordinator routes; you do the tec
 ```
 STATUS: ready|waiting|blocked|failed
 QUESTION: <one concrete question>
+DELIVER: <to> | <what> | <path>
 EVIDENCE: <what you claim>: <command>, exit <code>, <head SHA or file:line>
 ```
 
@@ -29,6 +30,7 @@ EVIDENCE: <what you claim>: <command>, exit <code>, <head SHA or file:line>
 | `failed` | It did not work. Say what you tried and what you saw. A draft is not `ready`. |
 
 - `QUESTION:` only with `blocked`, and only one.
+- One `DELIVER:` line per thing a person must receive from the coordinator: a drafted reply, a file for someone. `<path>` is the file that holds it, `-` if the line says it all. Zero lines when nobody must receive anything. `check.sh` shows each line to the coordinator on every tick until it is sent.
 - One `EVIDENCE:` line per claim. Run the command before you claim the result. Write `not verified` beside anything you did not check.
 
 The Stop hook asks once for a missing report. It cannot make the report true.

@@ -63,9 +63,9 @@ echo '[{"identifier":"DEF-963","title":null,"assignee":"Liz","description":"**Do
 has 'bold forms stripped, null title is -' "$F" '| DEF-963 | - | Liz | x | y | 2099-01-01 | - |'
 has 'unquoted config value' "$F" 'from Linear label goal2; do not edit'; has 'single-quoted config value' "$F" 'Ops allowance: merges, the audit'
 
-# No committed goal is a valid state, not an UNKNOWN; a goal dispatch is then uncommitted
+# No committed goal is a valid state, not an UNKNOWN; the NONE line is then the one line, with no DISPATCH line per launch
 echo '[]' | RENDER; O=$(DC); expect 'empty list exits 0' "$?" 0; expect 'empty list says so' "$O" 'DRIFT NONE committed'
 touch -t 202001010000 "$ST/drift-check.last"; printf 'w9\tteam\ts\t0\tp\tl\t2026-11-03T17:00:00Z\to\tplugin\t\t\tDEF-961\tx\n' >"$REG"
-O=$(DC); has 'empty list: goal dispatch uncommitted' "$O" 'DRIFT DISPATCH uncommitted DEF-961 w9'; has 'still says none' "$O" 'DRIFT NONE committed'
+O=$(DC); expect 'empty list: one line, no DISPATCH' "$O" 'DRIFT NONE committed'
 
 echo "commitments pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
