@@ -7,6 +7,7 @@
 #   session.sh recover [--go] [--personal-ok] [<name>...]    # list interrupted rows; --go resumes them
 #   session.sh status [--all]                                # registry + live pid + log age + final STATUS
 #   session.sh orgcheck                                      # ORG CHANGED lines, for check.sh
+#   session.sh delivers                                      # DELIVER lines of finished sessions, for check.sh
 #   session.sh log <name> [bytes]                            # tail of the session's log
 #
 # Registry: ~/.claude/agent-templates/state/sessions.tsv
@@ -165,6 +166,11 @@ status)
     team=$([ "$org" = "$TEAM_ORG" ] && echo team || echo PERSONAL)
     st=""; [ "$state" = done ] && [[ "$pid" != waiting:* ]] && st=$(final_status "$log")
     printf '%-28s %-8s %-5s %-8s %-8s log %-6s %s %s %s\n' "$name" "$state" "$profile" "$team" "$p" "$age" "${sid:0:8}" "$st" "$(plugin_unseen "$log")"
+  done
+  ;;
+delivers)  # name<TAB>n<TAB>to | what | path: each DELIVER line of a session not running; n counts through the whole log
+  latest | tr '\t' '\037' | while IFS=$'\037' read -r name profile sid pid prompt log _; do
+    alive "$pid" || [ ! -f "$log" ] || awk -v n="$name" 'sub(/^DELIVER: /, "") {print n "\t" ++k "\t" $0}' "$log"
   done
   ;;
 orgcheck)  # stable text: check.sh diffs these lines between ticks

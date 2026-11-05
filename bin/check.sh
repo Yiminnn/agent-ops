@@ -4,6 +4,9 @@
 # changed. It does not mean the tick finished: scripts/watchdog.sh reads state/heartbeat.done, written at the end of a
 # tick, and falls back to this file only until the first heartbeat.done exists.
 # The snapshot holds drift-check.sh's DRIFT lines: a goal-drift exception shows once as NEW, and as GONE when it clears.
+# Two kinds of line stay out of the snapshot and print on every tick until handled: NEW DELIVER <session> <n> <to> | <what>
+# | <path> (a DELIVER line of a finished worker report; handled by "deliver <session> <n>" in state/handled.txt), and
+# NEW SKILL STALE <old>→<new> (the plugin moved past state/coordinator-plugin-rev, which SessionStart writes).
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"; LAST="$T/state/heartbeat.last"; NEW=$(mktemp "${TMPDIR:-/tmp}/agent-ops-check.XXXXXX")  # bare mktemp ignores TMPDIR on macOS
@@ -28,7 +31,14 @@ T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"; LAST="$T/state/heartbeat.l
   free=$(df -g / | awk 'NR==2{print $4}'); [ "$free" -lt 20 ] && echo "DISK internal ${free}GiB free (<20)"
   [ -d "$LOGS_DIR" ] || echo "DRIVE $WORK_ROOT missing or wiped"
 } | sort > "$NEW" || { echo "check.sh: probe failed; last snapshot kept" >&2; rm -f "$NEW"; exit 1; }
+dl=$("$HERE/session.sh" delivers 2>/dev/null) || { echo "check.sh: probe failed; last snapshot kept" >&2; rm -f "$NEW"; exit 1; }
 if [ -f "$LAST" ]; then ch=$(diff "$LAST" "$NEW" | grep '^[<>]' | sed 's/^</GONE/;s/^>/NEW /' | grep -v '^GONE DRIFT DISPATCH '); else ch=$(cat "$NEW"); fi
+# Open work, outside the snapshot: printed every tick until handled
+while IFS=$'\t' read -r s n d; do  # a DELIVER line until state/handled.txt has "deliver <session> <n>"
+  [ -n "$s" ] && ! grep -qxF "deliver $s $n" "$T/state/handled.txt" 2>/dev/null && ch=${ch:+$ch$'\n'}"NEW DELIVER $s $n $d"
+done <<<"$dl"
+old=$(cat "$T/state/coordinator-plugin-rev" 2>/dev/null); rev=$(git -C "$HERE/.." rev-parse --short HEAD 2>/dev/null)
+[ -n "$old" ] && [ -n "$rev" ] && [ "$old" != "$rev" ] && ch=${ch:+$ch$'\n'}"NEW SKILL STALE ${old}→${rev}"  # until the coordinator re-invokes its skills and writes $rev there
 if [ -z "$ch" ]; then echo "NO CHANGE"; else echo "CHANGED:"; echo "$ch"; fi  # a dispatch line that only went away is no change
 cp "$NEW" "$LAST"
 touch "$T/state/drift-check.last"  # the next DRIFT DISPATCH lines start here

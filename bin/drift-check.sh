@@ -9,7 +9,8 @@
 #   DRIFT DISPATCH ops|uncommitted ...      a dispatch since the last check (state/drift-check.last) with no committed goal
 #   DRIFT PENDING overdue <date>|no follow-up: <line>
 #   DRIFT UNKNOWN: <input>                  an input is missing or a gh query failed: never read silence as all clear
-#   DRIFT NONE committed                    a fresh cache with no rows: no Linear issue carries the label (a valid state)
+#   DRIFT NONE committed                    a fresh cache with no rows: no Linear issue carries the label (a valid state);
+#                                           the one line then: every dispatch is ops, so no DISPATCH lines
 # Exit 0 with no lines or only the NONE line, 1 with exceptions, 2 with an UNKNOWN. A merged PR is listed as evidence; it does not clear a
 # passed checkpoint: the accountable human accepts the proof and moves the checkpoint in the Linear issue.
 # check.sh prints these lines and touches state/drift-check.last after it keeps a snapshot. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
@@ -96,7 +97,7 @@ for g, c in goals.items():
     out.append(f"DRIFT UNATTENDED {g} {c['objective']}: " + (f"executor {ex} not running" if ex else "no live executor") +
                f"; no human next action in pending.md (accountable: {c['human']})")
 
-for f in dispatches:
+for f in dispatches if goals or not gen else []:
     if f[11] == "ops": out.append(f"DRIFT DISPATCH ops {f[0]} {f[6]}: {f[12]}")
     elif gen and f[11] not in goals: out.append(f"DRIFT DISPATCH uncommitted {f[11]} {f[0]} {f[6]}: {f[12]}")
 

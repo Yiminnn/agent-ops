@@ -76,6 +76,8 @@ hasnt 'since the last check only' "$(DC)" 'DISPATCH'
 GEN=2026-11-03T15:59Z commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'
 O=$(DC); expect 'stale cache exits 2' "$?" 2; has 'stale cache UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments cache stale (generated 2026-11-03T15:59Z)'
 GEN=2026-11-03T16:01Z commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'; hasnt 'cache under 2 h is fresh' "$(DC)" 'stale'
+touch -t 202001010000 "$ST/drift-check.last"; commit; O=$(DC); expect 'no commitments exits 0' "$?" 0
+expect 'no commitments: one line, no DISPATCH per launch' "$O" 'DRIFT NONE committed'
 GEN=- commit 'DEF-900|Agent tooling|Yimin|harness green|drift PR open|2099-01-01|-'; O=$(DC); expect 'hand-written file exits 2' "$?" 2
 has 'hand-written file UNKNOWN' "$O" 'DRIFT UNKNOWN: commitments.md has no generated header'
 

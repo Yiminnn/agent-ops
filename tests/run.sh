@@ -86,6 +86,26 @@ echo other >"$TMP/profiles/team/org"; has 'check org' "$(C)" 'ORG CHANGED team';
 echo "$TEAM" >"$TMP/profiles/team/org"
 printf -- 'STATUS: blocked\n' >>"$TMP/logs/w3.log"; has 'check status' "$(C)" 'SESSION w3 done STATUS:blocked'
 
+# DELIVER: each line of a finished report prints on every tick until handled.txt has "deliver <session> <n>"
+HD="$TMP/home/state/handled.txt"; C >/dev/null
+printf -- 'DELIVER: Liz | reply on the budget | /tmp/r.md\nEVIDENCE: x\nDELIVER: Shubhangi | eval table | -\n' >>"$TMP/logs/w3.log"
+O=$(C); has 'deliver 1' "$O" 'NEW DELIVER w3 1 Liz | reply on the budget | /tmp/r.md'; has 'deliver 2' "$O" 'NEW DELIVER w3 2 Shubhangi | eval table | -'
+O=$(C); has 'deliver re-emitted' "$O" 'NEW DELIVER w3 1 Liz'; has 'deliver 2 re-emitted' "$O" 'NEW DELIVER w3 2'
+hasnt 'deliver not in the snapshot' "$(cat "$TMP/home/state/heartbeat.last")" 'DELIVER'
+echo 'deliver w3 1' >>"$HD"; O=$(C); hasnt 'handled deliver cleared' "$O" 'DELIVER w3 1'; has 'other still open' "$O" 'NEW DELIVER w3 2'
+echo 'deliver w3 2' >>"$HD"; expect 'all delivered: no change' "$(C)" 'NO CHANGE'
+sleep 300 & DLIVE=$!; printf 'DELIVER: Liz | draft | -\n' >"$TMP/logs/dl.log"; printf 'dl\tteam\tsidd\t%s\t%s\t%s\tt\t%s\tplugin\n' "$DLIVE" "$P" "$TMP/logs/dl.log" "$TEAM" >>"$REG"
+hasnt 'running session: no deliver yet' "$(C)" 'DELIVER dl'; kill "$DLIVE"; wait "$DLIVE" 2>/dev/null; has 'deliver once it ends' "$(C)" 'NEW DELIVER dl 1 Liz | draft'; echo 'deliver dl 1' >>"$HD"
+
+# SKILL STALE: the coordinator's SessionStart records the plugin rev; check.sh says so every tick while the plugin differs
+REV=$(git -C "$ROOT" rev-parse --short HEAD); RF="$TMP/home/state/coordinator-plugin-rev"
+echo '{"source":"startup"}' | AGENT_OPS_ROLE=coordinator CLAUDE_PLUGIN_ROOT="$ROOT" "$H/session_start.sh" >/dev/null
+expect 'start records rev' "$(cat "$RF")" "$REV"; expect 'same rev: no change' "$(C)" 'NO CHANGE'
+echo 0000000 >"$RF"; has 'stale skill' "$(C)" "NEW SKILL STALE 0000000→$REV"; has 'stale re-emitted' "$(C)" 'NEW SKILL STALE'
+echo "$REV" >"$RF"; expect 'rev written back: no change' "$(C)" 'NO CHANGE'
+mkdir -p "$TMP/nogit"; echo 0000000 >"$RF"; echo '{"source":"startup"}' | AGENT_OPS_ROLE=coordinator CLAUDE_PLUGIN_ROOT="$TMP/nogit" "$H/session_start.sh" >/dev/null 2>&1
+expect 'no git rev: no record' "$(cat "$RF" 2>/dev/null)" ''
+
 # SessionStart
 SS() { echo "{\"source\":\"${2:-startup}\"}" | AGENT_OPS_ROLE=$1 CLAUDE_PLUGIN_ROOT="$ROOT" "$H/session_start.sh"; }
 touch "$TMP/home/state/handoff-2026-01-01.md"; printf '## Freeze\n- dev: open\n## Deploy lock\n- prod: none\n## Owners\n- x\n' >"$TMP/home/state/coordinator.md"
