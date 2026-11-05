@@ -50,6 +50,8 @@ Only one coordinator acts at a time. The old one stops first: it deletes its cro
 | SESSION `done STATUS:failed` | Read the log. Resume with a fix, or report to the operator. |
 | SESSION `done` with no STATUS | `session.sh log <name>`. It may be cut off: `session.sh recover <name>` lists it. |
 | `DELIVER <session> <hash8> <to> \| <what> \| <path>` | Send `<what>` (the file at `<path>`) to `<to>`, or state in the report why not. Then append `deliver <session> <hash8>` to `state/handled.txt`; `check.sh` prints the line every tick until then. |
+| `DELIVER MALFORMED <session> <hash8>: <line>` | The worker wrote a DELIVER line with no `\|`. Read the session log, deliver what it meant or say why not, then append `deliver <session> <hash8>`. |
+| `DELIVER EXPIRED <session> <to> \| <what>` | An unhandled DELIVER from a log 7–30 days old; it prints once. Say in the report that it was never sent, and ask the operator once whether it still goes. |
 | `SKILL STALE <old>→<new>` | The plugin moved on since this session loaded its skills. Re-invoke `agent-ops:heartbeat` (and any other agent-ops skill in use), then write `<new>` to `state/coordinator-plugin-rev`. |
 | `ORG CHANGED` | Stop launching on that profile; PushNotification to the operator. |
 | Ask from a named teammate | Add 👀, start it (launch a worker session for code), reply in the thread when done, add ✅. |

@@ -100,10 +100,19 @@ echo "deliver w3 $H2" >>"$HD"; expect 'all delivered: no change' "$(C)" 'NO CHAN
 printf -- '--- session.sh run x ---\nDELIVER: Liz | reply on the budget | /tmp/r2.md\nDELIVER: Liz | new note | -\nDELIVER: Liz | new note | -\n' >>"$TMP/logs/w3.log"
 O=$(C); hasnt 'repeated report: handled stays handled' "$O" "DELIVER w3 $H1"; expect 'new line once' "$(grep -c 'DELIVER w3' <<<"$O")" 1
 echo "deliver w3 $(h8 'Liz|new note')" >>"$HD"
+printf -- '--- session.sh run y ---\nDELIVER: Liz | draft reply | /tmp/v1.md\n--- session.sh run z ---\nDELIVER: Liz | draft reply | /tmp/v2.md\n' >>"$TMP/logs/w3.log"; HV=$(h8 'Liz|draft reply')
+O=$(C); has 'one key, newest path' "$O" "NEW DELIVER w3 $HV Liz | draft reply | /tmp/v2.md"; hasnt 'older path hidden' "$O" '/tmp/v1.md'; echo "deliver w3 $HV" >>"$HD"
+printf -- 'DELIVER: the eval table for Liz\n' >>"$TMP/logs/w3.log"; HM=$(h8 'DELIVER: the eval table for Liz')
+O=$(C); has 'no | is malformed' "$O" "NEW DELIVER MALFORMED w3 $HM: DELIVER: the eval table for Liz"; has 'malformed re-emitted' "$(C)" "DELIVER MALFORMED w3 $HM"
+echo "deliver w3 $HM" >>"$HD"; expect 'malformed handled: no change' "$(C)" 'NO CHANGE'
 sleep 300 & DLIVE=$!; printf 'DELIVER: Liz | draft | -\n' >"$TMP/logs/dl.log"; printf 'dl\tteam\tsidd\t%s\t%s\t%s\tt\t%s\tplugin\n' "$DLIVE" "$P" "$TMP/logs/dl.log" "$TEAM" >>"$REG"
 hasnt 'running session: no deliver yet' "$(C)" 'DELIVER dl'; kill "$DLIVE"; wait "$DLIVE" 2>/dev/null; has 'deliver once it ends' "$(C)" "NEW DELIVER dl $(h8 'Liz|draft') Liz | draft"; echo "deliver dl $(h8 'Liz|draft')" >>"$HD"
-printf 'DELIVER: Liz | old one | -\n' >"$TMP/logs/old8.log"; touch -t 202001010000 "$TMP/logs/old8.log"; printf 'old8\tteam\tsido\t0\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/old8.log" "$TEAM" >>"$REG"
-hasnt 'log over 7 days old: not listed' "$(C)" 'DELIVER old8'
+ago() { python3 -c 'import datetime as d,sys; print((d.datetime.now()-d.timedelta(days=int(sys.argv[1]))).strftime("%Y%m%d%H%M"))' "$1"; }
+printf 'DELIVER: Liz | old one | -\nDELIVER: Liz | sent one | -\n' >"$TMP/logs/old8.log"; touch -t "$(ago 10)" "$TMP/logs/old8.log"; printf 'old8\tteam\tsido\t0\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/old8.log" "$TEAM" >>"$REG"
+echo "deliver old8 $(h8 'Liz|sent one')" >>"$HD"; O=$(C); has 'over 7 days, unhandled: EXPIRED once' "$O" 'NEW DELIVER EXPIRED old8 Liz | old one'
+hasnt 'expired is not open work' "$O" "DELIVER old8 $(h8 'Liz|old one')"; hasnt 'handled does not expire' "$O" 'sent one'; hasnt 'EXPIRED only once' "$(C)" 'old8'
+printf 'DELIVER: Liz | ancient | -\n' >"$TMP/logs/old40.log"; touch -t 202001010000 "$TMP/logs/old40.log"; printf 'old40\tteam\tsid4\t0\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/old40.log" "$TEAM" >>"$REG"
+hasnt 'log over 30 days old: not read' "$(C)" 'old40'
 printf 'DELIVER: Liz | secret | -\n' >"$TMP/logs/ro.log"; chmod 000 "$TMP/logs/ro.log"; printf 'ro\tteam\tsidr\t0\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/ro.log" "$TEAM" >>"$REG"
 O=$(C 2>&1); expect 'unreadable last log: probe still runs' "$?" 0; hasnt 'unreadable last log: no probe failure' "$O" 'probe failed'; chmod 600 "$TMP/logs/ro.log"; echo "deliver ro $(h8 'Liz|secret')" >>"$HD"; C >/dev/null
 
