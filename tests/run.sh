@@ -24,6 +24,8 @@ has 'stop bad word' "$(stop $'STATUS: done\nEVIDENCE: x')" '"decision": "block"'
 has 'stop no evidence' "$(stop 'STATUS: ready')" 'no EVIDENCE'
 has 'stop blocked no q' "$(stop $'STATUS: blocked\nEVIDENCE: x')" 'QUESTION'
 has 'stop q not blocked' "$(stop $'STATUS: ready\nQUESTION: ok?\nEVIDENCE: x')" 'only for'
+has 'stop template names DELIVER' "$(stop 'all finished')" 'DELIVER: <to> | <what> | <path>'
+expect 'stop ok with DELIVER' "$(stop $'STATUS: ready\nDELIVER: Liz | draft | -\nEVIDENCE: x')" ""
 expect 'stop ok' "$(stop "$GOOD")" ""
 expect 'stop blocked ok' "$(stop $'STATUS: blocked\nQUESTION: which base?\nEVIDENCE: x')" ""
 expect 'stop once' "$(stop 'no report' true)" ""
@@ -86,16 +88,24 @@ echo other >"$TMP/profiles/team/org"; has 'check org' "$(C)" 'ORG CHANGED team';
 echo "$TEAM" >"$TMP/profiles/team/org"
 printf -- 'STATUS: blocked\n' >>"$TMP/logs/w3.log"; has 'check status' "$(C)" 'SESSION w3 done STATUS:blocked'
 
-# DELIVER: each line of a finished report prints on every tick until handled.txt has "deliver <session> <n>"
-HD="$TMP/home/state/handled.txt"; C >/dev/null
-printf -- 'DELIVER: Liz | reply on the budget | /tmp/r.md\nEVIDENCE: x\nDELIVER: Shubhangi | eval table | -\n' >>"$TMP/logs/w3.log"
-O=$(C); has 'deliver 1' "$O" 'NEW DELIVER w3 1 Liz | reply on the budget | /tmp/r.md'; has 'deliver 2' "$O" 'NEW DELIVER w3 2 Shubhangi | eval table | -'
-O=$(C); has 'deliver re-emitted' "$O" 'NEW DELIVER w3 1 Liz'; has 'deliver 2 re-emitted' "$O" 'NEW DELIVER w3 2'
+# DELIVER: each line of a finished report prints on every tick until handled.txt has "deliver <session> <hash8>",
+# the hash of "<to>|<what>": a resumed worker that repeats its report does not bring a handled line back
+HD="$TMP/home/state/handled.txt"; C >/dev/null; h8() { printf '%s' "$1" | shasum | cut -c1-8; }; H1=$(h8 'Liz|reply on the budget'); H2=$(h8 'Shubhangi|eval table')
+printf -- 'DELIVER: Liz | reply on the budget | /tmp/r.md\nEVIDENCE: x\nDELIVER:  Shubhangi |eval table| -\n' >>"$TMP/logs/w3.log"
+O=$(C); has 'deliver 1' "$O" "NEW DELIVER w3 $H1 Liz | reply on the budget | /tmp/r.md"; has 'deliver 2, trimmed' "$O" "NEW DELIVER w3 $H2 Shubhangi | eval table | -"
+O=$(C); has 'deliver re-emitted' "$O" "NEW DELIVER w3 $H1 Liz"; has 'deliver 2 re-emitted' "$O" "NEW DELIVER w3 $H2"
 hasnt 'deliver not in the snapshot' "$(cat "$TMP/home/state/heartbeat.last")" 'DELIVER'
-echo 'deliver w3 1' >>"$HD"; O=$(C); hasnt 'handled deliver cleared' "$O" 'DELIVER w3 1'; has 'other still open' "$O" 'NEW DELIVER w3 2'
-echo 'deliver w3 2' >>"$HD"; expect 'all delivered: no change' "$(C)" 'NO CHANGE'
+echo "deliver w3 $H1" >>"$HD"; O=$(C); hasnt 'handled deliver cleared' "$O" "DELIVER w3 $H1"; has 'other still open' "$O" "NEW DELIVER w3 $H2"
+echo "deliver w3 $H2" >>"$HD"; expect 'all delivered: no change' "$(C)" 'NO CHANGE'
+printf -- '--- session.sh run x ---\nDELIVER: Liz | reply on the budget | /tmp/r2.md\nDELIVER: Liz | new note | -\nDELIVER: Liz | new note | -\n' >>"$TMP/logs/w3.log"
+O=$(C); hasnt 'repeated report: handled stays handled' "$O" "DELIVER w3 $H1"; expect 'new line once' "$(grep -c 'DELIVER w3' <<<"$O")" 1
+echo "deliver w3 $(h8 'Liz|new note')" >>"$HD"
 sleep 300 & DLIVE=$!; printf 'DELIVER: Liz | draft | -\n' >"$TMP/logs/dl.log"; printf 'dl\tteam\tsidd\t%s\t%s\t%s\tt\t%s\tplugin\n' "$DLIVE" "$P" "$TMP/logs/dl.log" "$TEAM" >>"$REG"
-hasnt 'running session: no deliver yet' "$(C)" 'DELIVER dl'; kill "$DLIVE"; wait "$DLIVE" 2>/dev/null; has 'deliver once it ends' "$(C)" 'NEW DELIVER dl 1 Liz | draft'; echo 'deliver dl 1' >>"$HD"
+hasnt 'running session: no deliver yet' "$(C)" 'DELIVER dl'; kill "$DLIVE"; wait "$DLIVE" 2>/dev/null; has 'deliver once it ends' "$(C)" "NEW DELIVER dl $(h8 'Liz|draft') Liz | draft"; echo "deliver dl $(h8 'Liz|draft')" >>"$HD"
+printf 'DELIVER: Liz | old one | -\n' >"$TMP/logs/old8.log"; touch -t 202001010000 "$TMP/logs/old8.log"; printf 'old8\tteam\tsido\t0\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/old8.log" "$TEAM" >>"$REG"
+hasnt 'log over 7 days old: not listed' "$(C)" 'DELIVER old8'
+printf 'DELIVER: Liz | secret | -\n' >"$TMP/logs/ro.log"; chmod 000 "$TMP/logs/ro.log"; printf 'ro\tteam\tsidr\t0\t%s\t%s\tt\t%s\tplugin\n' "$P" "$TMP/logs/ro.log" "$TEAM" >>"$REG"
+O=$(C 2>&1); expect 'unreadable last log: probe still runs' "$?" 0; hasnt 'unreadable last log: no probe failure' "$O" 'probe failed'; chmod 600 "$TMP/logs/ro.log"; echo "deliver ro $(h8 'Liz|secret')" >>"$HD"; C >/dev/null
 
 # SKILL STALE: the coordinator's SessionStart records the plugin rev; check.sh says so every tick while the plugin differs
 REV=$(git -C "$ROOT" rev-parse --short HEAD); RF="$TMP/home/state/coordinator-plugin-rev"
@@ -103,6 +113,7 @@ echo '{"source":"startup"}' | AGENT_OPS_ROLE=coordinator CLAUDE_PLUGIN_ROOT="$RO
 expect 'start records rev' "$(cat "$RF")" "$REV"; expect 'same rev: no change' "$(C)" 'NO CHANGE'
 echo 0000000 >"$RF"; has 'stale skill' "$(C)" "NEW SKILL STALE 0000000→$REV"; has 'stale re-emitted' "$(C)" 'NEW SKILL STALE'
 echo "$REV" >"$RF"; expect 'rev written back: no change' "$(C)" 'NO CHANGE'
+rm -f "$RF"; expect 'no record: check.sh starts tracking, quietly' "$(C)" 'NO CHANGE'; expect 'check.sh wrote the rev' "$(cat "$RF" 2>/dev/null)" "$REV"
 mkdir -p "$TMP/nogit"; echo 0000000 >"$RF"; echo '{"source":"startup"}' | AGENT_OPS_ROLE=coordinator CLAUDE_PLUGIN_ROOT="$TMP/nogit" "$H/session_start.sh" >/dev/null 2>&1
 expect 'no git rev: no record' "$(cat "$RF" 2>/dev/null)" ''
 

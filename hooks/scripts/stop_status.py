@@ -28,5 +28,6 @@ elif not re.search(r"^EVIDENCE: ", msg, re.M):
 if problem:
     reason = (problem + " If work remains that you can do, do it now and do not ask for confirmation. Then end with plain lines:\n"
               "STATUS: ready|waiting|blocked|failed\nQUESTION: <one concrete question, only if blocked>\n"
+              "DELIVER: <to> | <what> | <path>  (zero or more: one per thing a person must receive)\n"
               "EVIDENCE: <command, exit code, head SHA>  (one line per claim; mark anything unchecked as not verified)")
     print(json.dumps({"decision": "block", "reason": reason}))

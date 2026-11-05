@@ -7,7 +7,7 @@
 #   session.sh recover [--go] [--personal-ok] [<name>...]    # list interrupted rows; --go resumes them
 #   session.sh status [--all]                                # registry + live pid + log age + final STATUS
 #   session.sh orgcheck                                      # ORG CHANGED lines, for check.sh
-#   session.sh delivers                                      # DELIVER lines of finished sessions, for check.sh
+#   session.sh delivers                                      # DELIVER lines of sessions finished in 7 days, for check.sh
 #   session.sh log <name> [bytes]                            # tail of the session's log
 #
 # Registry: ~/.claude/agent-templates/state/sessions.tsv
@@ -168,10 +168,24 @@ status)
     printf '%-28s %-8s %-5s %-8s %-8s log %-6s %s %s %s\n' "$name" "$state" "$profile" "$team" "$p" "$age" "${sid:0:8}" "$st" "$(plugin_unseen "$log")"
   done
   ;;
-delivers)  # name<TAB>n<TAB>to | what | path: each DELIVER line of a session not running; n counts through the whole log
+delivers)  # name<TAB>hash8<TAB>to | what | path: each DELIVER line of a session not running whose log changed in 7 days
+  # hash8: sha1 of "<to>|<what>", trimmed; a repeated line (a resumed worker's repeated report) prints once, with the same key
   latest | tr '\t' '\037' | while IFS=$'\037' read -r name profile sid pid prompt log _; do
-    alive "$pid" || [ ! -f "$log" ] || awk -v n="$name" 'sub(/^DELIVER: /, "") {print n "\t" ++k "\t" $0}' "$log"
-  done
+    alive "$pid" || [ -z "$(find "$log" -mmin -10080 2>/dev/null)" ] || printf '%s\t%s\n' "$name" "$log"
+  done | python3 -c '
+import hashlib, sys
+seen = set()
+for l in sys.stdin:
+    name, log = l.rstrip("\n").split("\t", 1)
+    try: lines = open(log, errors="replace").read().splitlines()
+    except OSError: continue  # an unreadable log must not fail the probe
+    for d in lines:
+        if not d.startswith("DELIVER: "): continue
+        c = [x.strip() for x in d[9:].split("|")] + ["", "", "-"]
+        h = hashlib.sha1(f"{c[0]}|{c[1]}".encode()).hexdigest()[:8]
+        if (name, h) in seen: continue
+        seen.add((name, h)); print(f"{name}\t{h}\t{c[0]} | {c[1]} | {c[2] or chr(45)}")
+'
   ;;
 orgcheck)  # stable text: check.sh diffs these lines between ticks
   awk -F'\t' '{o[$2]=$8} END {for (p in o) print p "\t" o[p]}' "$REG" | sort | while IFS=$'\t' read -r p old; do
