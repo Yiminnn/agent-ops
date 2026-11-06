@@ -24,12 +24,15 @@ Only one coordinator acts at a time. The old one stops first: it deletes its cro
    - The description holds three lines, anywhere in it, one field per line; the first of each wins; a `- ` or `* ` bullet and bold (`**Done when:** x`, `**Done when**: x`, `**Done when: x**`) are allowed; keys are not case-sensitive:
      `Done when: <the done-when clause>`, `Next proof: <one inspectable result>`, `Checkpoint: YYYY-MM-DD` (UTC).
    - A missing line renders as `-`, and `drift-check.sh` prints `DRIFT INCOMPLETE <DEF> …` for that row: ask the accountable human once to fill in the issue. `|` in a value becomes `/`.
-3. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Sweep three sources every tick. The sweep finds the channels; `heartbeat-local.md` names people, not channels.
-   - **DMs and group DMs.** List all with `slack_list_user_channels(types="im,mpim", exclude_archived=true)`; follow `cursor` until there is none. Read each with `slack_read_channel(oldest=<ts>)`. Search misses Slack Connect DMs and file-only messages; this read gets them.
-   - **Channels.** Search only, `after:` that ts, a `limit` and `response_format: concise`, bots included: the operator's @mentions, and replies in threads (search covers internal threads).
-   - **Threads we wait on.** Read every Slack thread linked in `state/pending.md` with `slack_read_thread`. This gets a reply under an old parent, Slack Connect included.
+3. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Sweep the three sources below every tick. The sweep finds the channels; `heartbeat-local.md` names people, not channels. On every list, read and search, follow `cursor` until there is none.
+   - **DMs and group DMs.** List all with `slack_list_user_channels(types="im,mpim", exclude_archived=true)`. Read each with `slack_read_channel(oldest=<ts>)`. Search misses Slack Connect DMs and file-only messages; this read gets them. It returns top-level messages only: a reply under an older parent comes from the thread search, or, in a Slack Connect DM, only from a thread we wait on.
+   - **Searches.** Run each with `slack_search_public_and_private`, `after=<ts>`, `include_bots=true`, `sort=timestamp`, `sort_dir=asc`, `response_format=concise`:
+     - the operator's @mentions: keyword `<@operator>` (the operator's user id);
+     - replies in threads the operator is in: filter `is:thread with:<@operator>`;
+     - one search per person `heartbeat-local.md` names: filter `from:<@person>`. This gets their channel asks with no @mention.
+   - **Threads we wait on.** For every Slack thread linked in `state/pending.md`, run `slack_read_thread(message_ts=<parent ts>, oldest=<ts>)`. A link to a reply carries the parent ts as `thread_ts`: use that, not the reply's own ts. Handle only replies newer than the ts.
 
-   Done when every DM and group DM on the list is read, every pending thread is read, and every message the sweep returned is handled by the table below. Move the ts forward only past messages that are handled, or that have a line in `state/pending.md`; a crash before that point reads them again next tick.
+   Done when every page of every source is read, and every message from the people `heartbeat-local.md` names, every mention of the operator and every other message the sweep returned is handled by the table below. A page left unread is not done. Move the ts forward only past messages that are handled, or that have a line in `state/pending.md`; a crash before that point reads them again next tick.
 4. **Open work.** The probe diff says what changed; it does not say what is still undone. A tick that died after Probe leaves no diff, so derive the work from live state every tick, even on `NO CHANGE`:
    - each open, non-draft PR whose current head has no line `review <owner/repo>#<n> <head>` in `state/handled.txt`. Do not use GitHub reviews by the operator's login for this: workers post under the same login;
    - each PR approved by the required reviewer with checks green and not merged;
