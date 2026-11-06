@@ -34,7 +34,10 @@ dispatch_tag() {  # goal expect ops; sets tag and what (registry columns 12-13),
   elif [ -n "$1" ]; then
     [[ "$1" =~ ^DEF-[0-9]+$ ]] || die "--goal takes a DEF id such as DEF-123, not $1"
     [ -n "$2" ] || die "--goal $1 needs --expect \"<the concrete artifact or result this dispatch delivers>\""
-    [ -f "$COMMITMENTS" ] || die "no $COMMITMENTS: a --goal must be a committed goal there; the heartbeat writes it from Linear (README: Where the todo list lives)"
+    if [ -z "${LINEAR_TEAM:-}" ]; then  # local goals: render the cache from state/goals.md first, so the gate reads it as it is now
+      local err; err=$(python3 "$PLUGIN_DIR/bin/commitments-render.py" --local 2>&1) || die "$(tail -1 <<<"$err")"
+    fi
+    [ -f "$COMMITMENTS" ] || die "no $COMMITMENTS: a --goal must be a committed goal there; the heartbeat writes it from Linear, or from state/goals.md when LINEAR_TEAM is empty (README: Where the todo list lives)"
     awk -F'|' -v g="$1" '{gsub(/ /,"",$2)} $2==g {f=1} END {exit !f}' "$COMMITMENTS" ||
       die "$1 is not a row in $COMMITMENTS: dispatch to a committed goal, use --ops \"<reason>\" for routine work, or ask the accountable human to commit it"
     tag=$1 what=$2

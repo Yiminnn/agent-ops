@@ -11,7 +11,8 @@
 #
 # Registry: ~/.claude/agent-templates/state/sessions.tsv
 #   name  profile  sid  pid  prompt  log  started_utc  org  [plugin]  [sandbox dir]  [write paths, :-joined]  [goal]  [expect or ops reason]
-# Dispatch gate: launch, and a resume that gives new work, name --goal DEF-n (a row in state/commitments.md) with
+# Dispatch gate: launch, and a resume that gives new work, name --goal DEF-n (a row in state/commitments.md; rendered
+# from state/goals.md first when LINEAR_TEAM is empty) with
 # --expect "<concrete artifact or result>", or --ops "<reason>" for routine work (column 12 is then "ops"). A resume that
 # continues the same work says --continue and records no goal; recover does that. drift-check.sh reads columns 12-13.
 # Prompts are copied to $T/prompts/ (internal disk) so a wiped work drive

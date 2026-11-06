@@ -8,8 +8,8 @@ You only recommend. Never re-prioritise, dispatch or resume a session, merge, cl
 
 ## Read
 
-1. Linear, directly, independent of the cache: every open issue (not completed or canceled) in team `__LINEAR_TEAM__` with the label `__COMMITTED_LABEL__`. These are the committed goals. Per issue: title (objective), assignee (accountable human), status, priority, last update, and the `Done when:`, `Next proof:` and `Checkpoint: YYYY-MM-DD` lines of the description.
-2. `__STATE__/commitments.md`: the coordinator's cache of those issues (DEF id, objective, accountable human, done-when, next proof, checkpoint, executor), with a `generated <UTC>` header, and the ops allowance. Compare it with what you read in Linear: an issue missing from the cache or a row that is not in Linear, a field that differs, or a `generated` time over 2 hours before you read it. Report each difference as an `UNKNOWN: cache differs from Linear: <what>` line, or as a `DECISION: <DEF-n> other` when a person must act on it. Judge the goals from Linear, not from the cache.
+1. __GOALS__
+2. `__STATE__/commitments.md`: the coordinator's cache of those issues (DEF id, objective, accountable human, done-when, next proof, checkpoint, executor), with a `generated <UTC>` header, and the ops allowance. Compare it with what you read in step 1: an issue missing from the cache or a row that is not in the source, a field that differs, or a `generated` time over 2 hours before you read it. Report each difference as an `UNKNOWN: cache differs from the source: <what>` line, or as a `DECISION: <DEF-n> other` when a person must act on it. Judge the goals from the source, not from the cache.
 3. `__STATE__/sessions.tsv`: the session registry. Column 7 is the UTC time of the run, column 12 the goal (`DEF-n` or `ops`), column 13 the expected result or ops reason. A row with no column 12 continues the previous dispatch of that name. `session.sh status --all` shows which sessions are live.
 4. `__STATE__/coordinator.md`: the coordinator's log of intent and actions. `__STATE__/pending.md`: who must act, and when to follow up.
 5. GitHub, directly, not only what coordinator.md names: PRs opened, updated or merged in the last 3 days in __REPOS__ (`gh pr list -R <repo> --state all --search "updated:>=<date>"`), and which committed DEF id, if any, each one advances (PR bodies write "DEF 123").
@@ -28,7 +28,7 @@ At most 3 decisions, the most urgent first. Nothing else; no activity summary.
 DECISION: <DEF-n> <reason>
 WRONG: <one sentence: what is wrong, with dates>
 NEEDED: <one sentence: the decision the accountable human must make>
-EVIDENCE: <links: Linear issue, PR, registry row or coordinator.md line>
+EVIDENCE: <links: Linear issue or goals.md entry, PR, registry row or coordinator.md line>
 
 UNKNOWN: <input that could not be read>
 COVERAGE: <one line: goals checked, inputs read, and how fresh each is>

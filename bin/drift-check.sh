@@ -1,10 +1,10 @@
 #!/bin/bash
 # Mechanical goal-drift check, no model. Reads state/commitments.md (the cache the heartbeat renders from Linear with
-# commitments-render.py), the session registry, state/pending.md and, for a goal whose checkpoint has passed, the merged
+# commitments-render.py; with LINEAR_TEAM empty this script renders it first from the human-maintained state/goals.md), the session registry, state/pending.md and, for a goal whose checkpoint has passed, the merged
 # PRs in GH_REPOS that name its DEF id. Prints one line per exception:
 #   DRIFT CHECKPOINT <DEF> <objective>: checkpoint <date> passed, next proof "<proof>"; <merged PRs naming it>
 #   DRIFT UNATTENDED <DEF> <objective>: no live executor and no human next action in pending.md (follow-up not passed)
-#   DRIFT INCOMPLETE <DEF> <objective>: the Linear description lacks done-when, next proof or checkpoint ("-" in the cache)
+#   DRIFT INCOMPLETE <DEF> <objective>: the Linear description (or goals.md entry) lacks done-when, next proof or checkpoint ("-" in the cache)
 #   DRIFT UNKNOWN: commitments cache stale (generated <UTC>)   its generated header is over 2 h old, or it has none
 #   DRIFT DISPATCH ops|uncommitted ...      a dispatch since the last check (state/drift-check.last) with no committed goal
 #   DRIFT PENDING overdue <date>|no follow-up: <line>
@@ -17,11 +17,15 @@ set -u
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"
 [ -f "$T/config" ] || { echo "DRIFT UNKNOWN: config ($T/config)"; exit 2; }
 . "$T/config"
-GH_REPOS="$GH_REPOS" exec python3 - "$T/state" <<'EOF'
+if [ -z "${LINEAR_TEAM:-}" ]; then  # local goals: render the cache now, so it is never stale
+  err=$(python3 "$(dirname "$0")/commitments-render.py" --local 2>&1) || { echo "DRIFT UNKNOWN: goals.md: $(tail -1 <<<"${err##*kept: }")"; exit 2; }
+fi
+SRC=${LINEAR_TEAM:+the Linear description} GH_REPOS="$GH_REPOS" exec python3 - "$T/state" <<'EOF'
 import datetime as dt, json, os, re, subprocess, sys
 st = sys.argv[1]
 now = dt.datetime.fromisoformat(os.environ["AGENT_OPS_NOW"].replace("Z", "+00:00")) if os.environ.get("AGENT_OPS_NOW") else dt.datetime.now(dt.timezone.utc)
 today = now.date()
+src = os.environ.get("SRC") or "goals.md"
 out, unknown = [], []
 
 def read(name):
@@ -35,7 +39,7 @@ for l in lines or []:
     if re.fullmatch(r"DEF-\d+", c[0]):
         if len(c) < 7: unknown.append(f"row of {c[0]} in commitments.md (needs 7 cells)"); continue
         goals[c[0]] = dict(zip(["id", "objective", "human", "done", "proof", "checkpoint", "executor"], c[:7]))
-gen = next((m.group(1) for m in map(re.compile(r"generated (\S+) from Linear").match, lines or []) if m), None)
+gen = next((m.group(1) for m in map(re.compile(r"generated (\S+) from ").match, lines or []) if m), None)
 if gen:
     try: age = now - dt.datetime.fromisoformat(gen.replace("Z", "+00:00"))
     except ValueError: age = None
@@ -86,7 +90,7 @@ def merged_prs(g):
 
 for g, c in goals.items():
     miss = [k for k, f in (("done-when", "done"), ("next proof", "proof"), ("checkpoint", "checkpoint")) if c[f] in ("", "-")]
-    if miss: out.append(f"DRIFT INCOMPLETE {g} {c['objective']}: no {', '.join(miss)} in the Linear description (accountable: {c['human']})")
+    if miss: out.append(f"DRIFT INCOMPLETE {g} {c['objective']}: no {', '.join(miss)} in {src} (accountable: {c['human']})")
     try: cp = None if "checkpoint" in miss else dt.date.fromisoformat(c["checkpoint"])
     except ValueError: unknown.append(f"checkpoint of {g} in commitments.md ({c['checkpoint']!r}, want YYYY-MM-DD)"); continue
     if cp and cp < today:

@@ -14,7 +14,7 @@ Taken from [`deepseek-ai/dsh-superagent-prototype`](https://github.com/deepseek-
 | Health check | `scripts/watchdog.sh` under launchd, no Claude | Alerts when the last finished tick (`state/heartbeat.done`) is over 90 minutes old, or failed |
 | Recovery | `session.sh recover` | Lists runs with no clean end; `--go` resumes them with a note to check the worktree, git log and PR before it repeats an outside action |
 | Handover | `skills/handoff`, heartbeat rule | A new coordinator ticks once, in full, before the old one stops |
-| Dispatch gate | `session.sh launch`/`resume` | Every dispatch names `--goal DEF-n --expect "<result>"` (a row in `state/commitments.md`) or `--ops "<reason>"`; a resume of the same work says `--continue`. Registry columns 12-13 |
+| Dispatch gate | `session.sh launch`/`resume` | Every dispatch names `--goal DEF-n --expect "<result>"` (a row in `state/commitments.md`, from Linear or `state/goals.md`) or `--ops "<reason>"`; a resume of the same work says `--continue`. Registry columns 12-13 |
 | Drift check | `bin/drift-check.sh`, no model, inside `check.sh` | Passed checkpoints, unattended or incomplete commitments, ops or uncommitted dispatches, overdue pending items; `UNKNOWN` on a missing input or a stale commitments cache, never an all clear |
 | Drift audit | `bin/drift-audit.sh` under launchd, one fresh read-only worker per working day | At most 3 decisions with evidence and a coverage line, sent only when new; recommends, never acts. The watchdog alerts when it is late or failed |
 
@@ -23,6 +23,18 @@ Taken from [`deepseek-ai/dsh-superagent-prototype`](https://github.com/deepseek-
 ## Where the todo list lives
 
 The committed goals live in Linear, nowhere else: the open issues in team `LINEAR_TEAM` that carry the label `COMMITTED_LABEL` (default `committed`), in Linear priority order. Humans (Yimin, Shubhangi, Liz) add and remove that label; the coordinator never does. The issue title is the objective, the assignee is the accountable human, and three lines in the description hold the rest: `Done when: …`, `Next proof: …`, `Checkpoint: YYYY-MM-DD`. Each heartbeat reads those issues with the Linear MCP tools and pipes them into `bin/commitments-render.py`, which writes `state/commitments.md`: a read-only cache, with a `generated <UTC> from Linear label <label>; do not edit` header and the ops allowance from the config. Nobody edits that file. The dispatch gate and `drift-check.sh` read it, because shell scripts cannot read Linear; `drift-check.sh` reports `DRIFT UNKNOWN: commitments cache stale` when the header is over 2 hours old, `DRIFT INCOMPLETE` for an issue that lacks one of the three lines, and `DRIFT NONE committed` when no issue carries the label. Issue ids must be `DEF-n`, so `LINEAR_TEAM` is the DEF team. The daily drift audit reads Linear directly and reports any difference from the cache. `state/pending.md` stays the coordinator's own list of what it waits for.
+
+Without Linear, leave `LINEAR_TEAM` empty: the committed goals are then `state/goals.md`, a file humans maintain and the coordinator never edits. One heading per goal, in priority order, with the same lines under it (`templates/goals.example.md`):
+
+```
+## DEF-12 <objective>
+Accountable: <name>
+Done when: …
+Next proof: …
+Checkpoint: YYYY-MM-DD
+```
+
+The heartbeat skips the Linear sync; `drift-check.sh` and the dispatch gate run `commitments-render.py --local` themselves before they read, so the cache always matches the file (header `generated <UTC> from goals.md; do not edit`) and is never stale. A missing `goals.md` is `DRIFT UNKNOWN` and refuses `--goal`; a heading that is not `DEF-n`, or a repeated id, keeps the old cache. The daily audit reads `goals.md` instead of Linear.
 
 ## Install
 
@@ -34,7 +46,7 @@ State stays outside the plugin, in `~/.claude/agent-templates` (or `$AGENT_OPS_H
 4. Coordinator: `AGENT_OPS_ROLE=coordinator claude --plugin-dir <this dir>`, then `/agent-ops:heartbeat`.
 5. Watchdog: fill in `scripts/*.plist.template`, copy it to `~/Library/LaunchAgents/`, `launchctl load`. It needs `AGENT_OPS_ALERT_CMD <message>`, a command that works with no Claude session. With none it only writes `state/watchdog.alert`, and nobody is told. It judges `state/heartbeat.done`, which the heartbeat skill writes at the end of every tick (`<UTC> ok` or `<UTC> failed: <reason>`), not `heartbeat.last`, which `check.sh` touches at Probe, before the tick has done its work. It alerts once per episode when that file is older than `AGENT_OPS_WATCHDOG_MINUTES` (default 90) or its last line says `failed:`. Until the first `heartbeat.done` exists, after an upgrade, it judges `heartbeat.last` and says so in the alert. `state/heartbeat.stopped` silences it.
 
-6. Goals: set `LINEAR_TEAM`, `COMMITTED_LABEL` and `OPS_ALLOWANCE` in the config, and create `state/pending.md` (empty is fine). The first heartbeat writes `state/commitments.md` from Linear. Until both files exist, `drift-check.sh` prints `DRIFT UNKNOWN` and `--goal` launches are refused (`--ops` works).
+6. Goals: set `LINEAR_TEAM`, `COMMITTED_LABEL` and `OPS_ALLOWANCE` in the config, and create `state/pending.md` (empty is fine). The first heartbeat writes `state/commitments.md` from Linear. Without Linear, leave `LINEAR_TEAM` empty and write `state/goals.md` instead (above). Until both files exist, `drift-check.sh` prints `DRIFT UNKNOWN` and `--goal` launches are refused (`--ops` works).
 7. Drift audit: set `DRIFT_AUDIT_PROFILE` in the config, fill in `scripts/com.agent-ops.drift-audit.plist.template` (weekdays, 13:30 UTC in local hours), copy and load it like the watchdog. It writes `state/drift-audit.md` and `state/drift-audit.done`; the watchdog alerts once per episode when that is missing, failed, or over 30 working hours old.
 
 Needs Claude Code 2.1.295 or later (`onFailure`), `python3`, `jq`, `gh`, macOS.

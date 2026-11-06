@@ -18,6 +18,7 @@ DEPLOY_REPO="o/app"
 DEPLOY_BRANCH="dev"
 BOT_REVIEWERS="codex"
 SSO_PROFILES="p"
+LINEAR_TEAM="DEF"  # Linear mode; tests/goals.sh empties it for the local goals.md path
 CONF
 pass=0; fail=0
 ok() { pass=$((pass+1)); }

@@ -13,6 +13,8 @@ Ops allowance: heartbeat ticks, PR reviews, merges, deploy watching, recovery of
 This is the shape of state/commitments.md, a read-only cache. Do not copy or edit it: each heartbeat rewrites it from
 Linear (team LINEAR_TEAM, label COMMITTED_LABEL, not completed or canceled), in Linear priority order (Urgent first, no priority last).
 To change a goal, change its Linear issue. To commit or uncommit one, a human adds or removes the label.
+With LINEAR_TEAM empty the source is state/goals.md instead (templates/goals.example.md, file order is the priority),
+the header says "from goals.md", and drift-check.sh and the dispatch gate render it before each read.
 
 - objective = issue title; accountable = assignee; executor = the session whose current dispatch is this goal (registry), or -.
 - Ids are DEF-n only: LINEAR_TEAM must be the DEF team. No labelled issue gives a file with no rows: DRIFT NONE committed.

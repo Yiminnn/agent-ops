@@ -17,9 +17,14 @@ done_line() { echo "$STAMP $1" >"$DONE"; echo "drift-audit: $1"; [ "$1" = ok ]; 
 grep -q "^$DAY[^ ]* ok$" "$DONE" 2>/dev/null && exit 0  # one audit per working day; a failed one may run again
 [ -n "${DRIFT_AUDIT_PROFILE:-}" ] || done_line "failed: no DRIFT_AUDIT_PROFILE in $T/config"
 
+if [ -n "${LINEAR_TEAM:-}" ]; then
+  GOALS="Linear, directly, independent of the cache: every open issue (not completed or canceled) in team \`$LINEAR_TEAM\` with the label \`${COMMITTED_LABEL:-committed}\`. These are the committed goals. Per issue: title (objective), assignee (accountable human), status, priority, last update, and the \`Done when:\`, \`Next proof:\` and \`Checkpoint: YYYY-MM-DD\` lines of the description."
+else  # LINEAR_TEAM empty: the goals are the human-maintained state/goals.md
+  GOALS="\`$S/goals.md\`, directly, independent of the cache: the human-maintained list of committed goals, in priority order. Per goal: its \`## DEF-n <objective>\` heading and the \`Accountable:\`, \`Done when:\`, \`Next proof:\` and \`Checkpoint: YYYY-MM-DD\` lines under it; its last change is the file's git history or mtime."
+fi
 prompt=$(mktemp "${TMPDIR:-/tmp}/agent-ops-audit.XXXXXX")
 sed -e "s|__STATE__|$S|g" -e "s|__REPORT__|$REP|g" -e "s|__REPOS__|$GH_REPOS|g" -e "s|__DATE__|$DAY|g" \
-  -e "s|__LINEAR_TEAM__|${LINEAR_TEAM:-<LINEAR_TEAM not set in the config: write an UNKNOWN line>}|g" -e "s|__COMMITTED_LABEL__|${COMMITTED_LABEL:-committed}|g" "$HERE/../templates/drift-audit-prompt.md" >"$prompt"
+  -e "s|__GOALS__|$GOALS|g" "$HERE/../templates/drift-audit-prompt.md" >"$prompt"
 rm -f "$REP"
 out=$("$HERE/session.sh" launch "$DRIFT_AUDIT_PROFILE" "drift-audit-${STAMP//[-:]/}" "$prompt" --no-sandbox --ops "daily drift audit" 2>&1); rc=$?
 rm -f "$prompt"
