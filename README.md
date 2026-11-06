@@ -26,7 +26,7 @@ The committed goals live in Linear, nowhere else: the open issues in team `LINEA
 
 ## Install
 
-State stays outside the plugin, in `~/.claude/agent-templates` (or `$AGENT_OPS_HOME`): `state/`, `prompts/`, `worker-rules.md`, `heartbeat-local.md` (people and routes), and `config` (machine values).
+State stays outside the plugin, in `~/.claude/agent-templates` (or `$AGENT_OPS_HOME`): `state/`, `prompts/`, `worker-rules.md`, `heartbeat-local.md` (people rules: who is who, whose asks go where; no channel ids), and `config` (machine values).
 
 1. Copy `config.example` to `$AGENT_OPS_HOME/config` and fill it in. Paths must be double-quoted literal absolute paths, each key once.
 2. Create `LOGS_DIR`. A launch refuses if it is missing, so a wiped drive stays visible.

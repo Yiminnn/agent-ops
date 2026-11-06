@@ -7,7 +7,7 @@ description: Coordinator heartbeat, the router's loop. Check GitHub, deploys, wo
 
 The coordinator is the router. It evaluates events, creates work, replies, reviews through agents, merges and watches deploys. It never writes code: code work goes to one worker session per ticket, each in its own directory. It takes as little human attention as possible: a person hears from it only when they must act or can use a result.
 
-State is in `~/.claude/agent-templates` (or `$AGENT_OPS_HOME`), outside this plugin. Read `state/coordinator.md` (locks, owners, rules) before any merge or deploy. Read the newest `state/handoff-*.md` once per session. Read `heartbeat-local.md` once per session: who is who, which asks go where, the SSO command, the health URL, and hard rules for this team. Where it and this file differ, it wins.
+State is in `~/.claude/agent-templates` (or `$AGENT_OPS_HOME`), outside this plugin. Read `state/coordinator.md` (locks, owners, rules) before any merge or deploy. Read the newest `state/handoff-*.md` once per session. Read `heartbeat-local.md` once per session: who is who, whose asks go where (people rules, no channel ids), the SSO command, the health URL, and hard rules for this team. Where it and this file differ, it wins.
 
 ## Handover
 
@@ -24,7 +24,12 @@ Only one coordinator acts at a time. The old one stops first: it deletes its cro
    - The description holds three lines, anywhere in it, one field per line; the first of each wins; a `- ` or `* ` bullet and bold (`**Done when:** x`, `**Done when**: x`, `**Done when: x**`) are allowed; keys are not case-sensitive:
      `Done when: <the done-when clause>`, `Next proof: <one inspectable result>`, `Checkpoint: YYYY-MM-DD` (UTC).
    - A missing line renders as `-`, and `drift-check.sh` prints `DRIFT INCOMPLETE <DEF> …` for that row: ask the accountable human once to fill in the issue. `|` in a value becomes `/`.
-3. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Read each channel id on the `Read channels` line of `heartbeat-local.md` (one line listing the people's DMs and group DMs, each as `<name> <channel id>`) with `slack_read_channel` from `oldest=<ts>`: search misses file-only messages, which have no text. Search only the other channels and DMs, with `after:` that ts, a `limit` and `response_format: concise`, bots included. Done when every message from the people `heartbeat-local.md` names, and every mention of the operator, is handled by the table below. Move the ts forward only past messages that are handled, or that have a line in `state/pending.md`; a crash before that point reads them again next tick.
+3. **Slack.** Read `state/heartbeat-slack.ts` (a Unix ts; create it with now−1800 if missing). Sweep three sources every tick. The sweep finds the channels; `heartbeat-local.md` names people, not channels.
+   - **DMs and group DMs.** List all with `slack_list_user_channels(types="im,mpim", exclude_archived=true)`; follow `cursor` until there is none. Read each with `slack_read_channel(oldest=<ts>)`. Search misses Slack Connect DMs and file-only messages; this read gets them.
+   - **Channels.** Search only, `after:` that ts, a `limit` and `response_format: concise`, bots included: the operator's @mentions, and replies in threads (search covers internal threads).
+   - **Threads we wait on.** Read every Slack thread linked in `state/pending.md` with `slack_read_thread`. This gets a reply under an old parent, Slack Connect included.
+
+   Done when every DM and group DM on the list is read, every pending thread is read, and every message the sweep returned is handled by the table below. Move the ts forward only past messages that are handled, or that have a line in `state/pending.md`; a crash before that point reads them again next tick.
 4. **Open work.** The probe diff says what changed; it does not say what is still undone. A tick that died after Probe leaves no diff, so derive the work from live state every tick, even on `NO CHANGE`:
    - each open, non-draft PR whose current head has no line `review <owner/repo>#<n> <head>` in `state/handled.txt`. Do not use GitHub reviews by the operator's login for this: workers post under the same login;
    - each PR approved by the required reviewer with checks green and not merged;
