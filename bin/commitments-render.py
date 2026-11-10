@@ -9,6 +9,10 @@ with name or displayName), description. The description holds the block, one fie
     Checkpoint: YYYY-MM-DD
 A missing field renders as "-"; drift-check.sh flags that row. The executor is the session whose current dispatch is the
 goal (its last non-empty registry column 12), or "-". The file is replaced atomically; on bad input nothing is written and the exit is 1.
+A row whose Done when, Next proof or Checkpoint differs from the cache it replaces prints, once, and is appended with its
+time to state/goalpost.log:
+    DRIFT GOALPOST <DEF> <field>: "<old>" -> "<new>"
+A row that is not in the old cache is new, not a change.
 AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
 """
 import datetime as dt, json, os, re, subprocess, sys
@@ -79,9 +83,21 @@ def main():
         "|---|---|---|---|---|---|---|",
         *("| " + " | ".join(map(cell, r)) + " |" for r in rows),
     ]) + "\n"
+    moved = goalposts(rows)
     tmp = os.path.join(STATE, ".commitments.md.tmp")
     with open(tmp, "w") as f: f.write(text)
     os.replace(tmp, os.path.join(STATE, "commitments.md"))
+    if moved:
+        with open(os.path.join(STATE, "goalpost.log"), "a") as f: f.writelines(f"{now.strftime('%Y-%m-%dT%H:%MZ')}\t{l}\n" for l in moved)
+        print("\n".join(moved))
+
+
+def goalposts(rows):  # changed block fields against the cache about to be replaced, compared as rendered
+    try: old = {c[0]: c for c in ([x.strip() for x in l.strip().strip("|").split("|")] for l in open(os.path.join(STATE, "commitments.md")))
+                if re.fullmatch(r"DEF-\d+", c[0]) and len(c) >= 7}
+    except OSError: return []
+    return [f'DRIFT GOALPOST {r[0]} {k}: "{old[r[0]][i]}" -> "{cell(r[i])}"' for r in rows if r[0] in old
+            for i, k in ((3, "Done when"), (4, "Next proof"), (5, "Checkpoint")) if old[r[0]][i] != cell(r[i])]
 
 
 

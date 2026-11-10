@@ -82,6 +82,21 @@ Failure behind it: on 2026-11-03 the coordinator stayed busy and healthy while m
 
 Acceptance replay: `tests/fixtures/2026-11-03`, every dispatch tagged to a committed tooling goal. `drift-check.sh` flags B6 and B8 (checkpoint and unattended) and nothing else.
 
+## Retro 2026-11-10: three drift additions
+
+Failures behind them, all on 2026-11-10:
+- The drift check printed nothing while the PR stack of a committed goal had no update and no review for five days.
+- The goal's `Done when` was loosened from "merged to dev" to "waits only on review", and nothing showed it.
+- 33 pending rows, most of them waiting on the operator, were each pushed once and then lost.
+
+| # | Change | Decision | Why |
+|---|---|---|---|
+| 1 | `DRIFT STALLED <DEF> <repo>#<n> <days>d` | **Built** `drift-check.sh` | The PR is linked by name: its title, body or head branch names the DEF id, plus the PRs stacked on or under it (head = base), never through `main`, `master` or `DEPLOY_BRANCH`. **Not linked:** comments (reviews name follow-up ids), and the `#n` in an executor's `--expect` (it names no repo, and a worker reads PRs it does not own). **Clock:** last commit, review or comment, not `updatedAt`, so label and title edits do not count. A force-push that keeps old committer dates is missed |
+| 2 | `DRIFT GOALPOST <DEF> <field>: "<old>" -> "<new>"` | **Built** `commitments-render.py` | Compared as rendered against the cache that the render replaces, so the line prints once. `state/goalpost.log` keeps the trace. A row that left the cache and came back counts as new |
+| 3 | `WAITING ON OPERATOR <n>:` digest | **Built** `operator-digest.sh`, called on the `DRIFT SUMMARY` tick | Matched by the first field (`OPERATOR_NAME`, then a non-letter), so `Liz→Yimin` rows, owed to the operator, are not in it. Rows with no follow-up come first |
+
+No new guard, deny or hook.
+
 ## Size
 
 Scripts other than tests: 529 lines before these rounds, 587 after (+11 %), and no script over 150. All lines of script: 735 to 1022 (+39 %), which is over the limit of about a third. The excess is `tests/regress.sh`, one block per reproduced bug. Keeping it: it is the proof that each fix holds, and none of it runs in a session.

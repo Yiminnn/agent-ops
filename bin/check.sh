@@ -5,8 +5,9 @@
 # tick, and falls back to this file only until the first heartbeat.done exists.
 # The snapshot holds drift-check.sh's DRIFT lines, compared by item (kind + DEF id, the pending line, the UNKNOWN input):
 # NEW DRIFT when an item is new or its text changed (a CHECKPOINT's merged-PR evidence aside), GONE DRIFT when it clears. Once a UTC day, on the first tick at or after
-# DRIFT_SUMMARY_HOUR_UTC (config, default 13; 24 turns it off), DRIFT SUMMARY <date>: <n> open heads the output with every open item;
-# state/drift-summary.last holds the day of the last one. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
+# DRIFT_SUMMARY_HOUR_UTC (config, default 13; 24 turns it off), DRIFT SUMMARY <date>: <n> open heads the output with every open item,
+# then operator-digest.sh (WAITING ON OPERATOR <n>:); state/drift-summary.last holds the day of the last one. A STALLED item
+# is its goal and PR: its day count growing is not news. AGENT_OPS_NOW (UTC ISO) fixes the clock for tests.
 # Two kinds of line stay out of the snapshot and print on every tick until handled: NEW DELIVER <session> <hash8> <to> |
 # <what> | <path> (a DELIVER line of a worker report from the last 7 days; handled by "deliver <session> <hash8>" in
 # state/handled.txt; a line with no | prints as NEW DELIVER MALFORMED <session> <hash8>: <line>), and NEW SKILL STALE
@@ -42,12 +43,13 @@ dl=$("$HERE/session.sh" delivers 2>/dev/null) || { echo "check.sh: probe failed;
 drift_news() {  # NEW DRIFT for an item that is new or whose text changed, GONE DRIFT for a cleared one (a dispatch clears silently)
   awk 'function key(l, k) { k = l  # the item: kind + DEF, the pending line without its dates, the UNKNOWN input without its detail
       if (match(l, /^DRIFT (CHECKPOINT|UNATTENDED|INCOMPLETE) DEF-[0-9]+/)) return substr(l, 1, RLENGTH)
+      if (match(l, /^DRIFT STALLED DEF-[0-9]+ [^ ]+/)) return substr(l, 1, RLENGTH)  # + the PR
       if (sub(/^DRIFT PENDING (overdue [0-9-]+|no follow-up): /, "", k)) { gsub(/follow-up:? *[0-9-]+/, "", k); return "DRIFT PENDING " k }
       if (l ~ /^DRIFT UNKNOWN: /) sub(/ \(.*/, "", k)
       return k }
     !/^DRIFT / { next }
     { k = key($0); k = k SUBSEP (++n[FILENAME, k]) }  # items that share a key (same row twice, dates apart) pair up in order
-    { c = $0; if (c ~ /^DRIFT CHECKPOINT /) sub(/"; [^"]*$/, "\"", c) }  # its merged-PR evidence is not news
+    { c = $0; if (c ~ /^DRIFT CHECKPOINT /) sub(/"; [^"]*$/, "\"", c); if (c ~ /^DRIFT STALLED /) sub(/ [0-9]+d$/, "", c) }  # its merged-PR evidence, or one more quiet day, is not news
     FILENAME == ARGV[1] { old[k] = c; line[k] = $0; next }
     { now[k] = 1; if (!(k in old) || old[k] != c) print "NEW " $0 }
     END { for (k in old) if (!(k in now) && line[k] !~ /^DRIFT DISPATCH /) print "GONE " line[k] }' "$1" "$2" | sort
@@ -72,7 +74,8 @@ old=$(cat "$T/state/coordinator-plugin-rev" 2>/dev/null); rev=$(git -C "$HERE/..
 now=${AGENT_OPS_NOW:-$(date -u +%FT%TZ)}; day=${now:0:10}; SUM="$T/state/drift-summary.last"  # the UTC day of the last summary
 if [ "$((10#${now:11:2}))" -ge "${DRIFT_SUMMARY_HOUR_UTC:-13}" ] && [ "$(cat "$SUM" 2>/dev/null)" != "$day" ]; then
   open=$(grep '^DRIFT ' "$NEW" | grep -v -e '^DRIFT DISPATCH ' -e '^DRIFT NONE committed$')  # a dispatch is an event; no committed goals is said once, as news
-  echo "DRIFT SUMMARY $day: $(grep -c . <<<"$open") open"; [ -n "$open" ] && echo "$open"; echo "$day" >"$SUM"
+  echo "DRIFT SUMMARY $day: $(grep -c . <<<"$open") open"; [ -n "$open" ] && echo "$open"
+  "$HERE/operator-digest.sh"; echo "$day" >"$SUM"  # WAITING ON OPERATOR <n>: the oldest rows that wait on the operator
 elif [ -z "$ch" ]; then echo "NO CHANGE"; fi
 [ -n "$ch" ] && { echo "CHANGED:"; echo "$ch"; }  # a dispatch line that only went away is no change
 cp "$NEW" "$LAST"
