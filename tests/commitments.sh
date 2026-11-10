@@ -68,4 +68,25 @@ echo '[]' | RENDER; O=$(DC); expect 'empty list exits 0' "$?" 0; expect 'empty l
 touch -t 202001010000 "$ST/drift-check.last"; printf 'w9\tteam\ts\t0\tp\tl\t2026-11-03T17:00:00Z\to\tplugin\t\t\tDEF-961\tx\n' >"$REG"
 O=$(DC); expect 'empty list: one line, no DISPATCH' "$O" 'DRIFT NONE committed'
 
+# DRIFT GOALPOST: a changed Done when, Next proof or Checkpoint against the previous cache prints once and is kept in
+# state/goalpost.log; the first render of a row is not a change
+GP="$ST/goalpost.log"; rm -f "$GP"; : >"$REG"
+gp() {  # DEF-971 with done-when $1, next proof $2, checkpoint $3; DEF-972 when $4 is set
+  local b=''; [ -n "${4:-}" ] && b=",{\"identifier\":\"DEF-972\",\"title\":\"Inbox\",\"assignee\":\"Bo\",\"description\":\"Done when: $4\"}"
+  printf '[{"identifier":"DEF-971","title":"Ledger","assignee":"Ana","description":"Done when: %s\\nNext proof: %s\\nCheckpoint: %s"}%s]' "$1" "$2" "$3" "$b" | RENDER
+}
+O=$(gp 'merged to dev' 'CI of each PR' 2099-01-07); expect 'a first render is not a change' "$O" ''
+O=$(gp 'merged to dev' 'CI of each PR' 2099-01-07); expect 'no change, no line' "$O" ''; expect 'and no history' "$(cat "$GP" 2>/dev/null)" ''
+O=$(NOW=2026-11-04T09:00:00Z gp 'it waits only  on review' 'CI of each PR' 2099-01-14); expect 'render still exits 0' "$?" 0
+expect 'each changed field once, Linear names' "$O" $'DRIFT GOALPOST DEF-971 Done when: "merged to dev" -> "it waits only on review"\nDRIFT GOALPOST DEF-971 Checkpoint: "2099-01-07" -> "2099-01-14"'
+expect 'history keeps the time and the line' "$(head -1 "$GP")" $'2026-11-04T09:00Z\tDRIFT GOALPOST DEF-971 Done when: "merged to dev" -> "it waits only on review"'
+O=$(gp 'it waits only on review' 'CI of each PR' 2099-01-14); expect 'reported once: the next render is quiet' "$O" ''
+O=$(gp 'it waits only on review' 'CI | review' 2099-01-14 'inbox empty'); expect 'a new row is not a change; | as rendered' "$O" 'DRIFT GOALPOST DEF-971 Next proof: "CI of each PR" -> "CI / review"'
+O=$(gp 'it waits only on review' 'CI | review' 2099-01-14 'inbox zero'); expect 'a second row' "$O" 'DRIFT GOALPOST DEF-972 Done when: "inbox empty" -> "inbox zero"'
+O=$(echo '[{"identifier":"DEF-971","title":"Ledger","assignee":"Ana","description":"Done when: it waits only on review\nCheckpoint: 2099-01-14"}]' | RENDER)
+expect 'a removed field is a change' "$O" 'DRIFT GOALPOST DEF-971 Next proof: "CI / review" -> "-"'
+O=$(gp 'merged' 'x' 2099-02-01 'inbox zero'); hasnt 'a row that left and came back counts as new' "$O" 'DEF-972'
+expect 'history grows by line' "$(wc -l <"$GP" | tr -d ' ')" 8
+cp "$CM" "$TMP/before"; echo 'bad' | RENDER 2>/dev/null; expect 'bad input: history kept' "$(wc -l <"$GP" | tr -d ' ')" 8
+
 echo "commitments pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]

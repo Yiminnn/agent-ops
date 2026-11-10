@@ -19,4 +19,6 @@ LINEAR_TEAM="<the DEF team: its issue ids must be DEF-n, the only ids the dispat
 COMMITTED_LABEL="committed"  # the label a human puts on a committed goal; the coordinator never adds or removes it
 OPS_ALLOWANCE="heartbeat ticks, PR reviews, merges, deploy watching, recovery of cut-off sessions, the daily drift audit"
 DRIFT_SUMMARY_HOUR_UTC=13  # check.sh lists every open drift item once a day, on the first tick at or after this UTC hour
+STALLED_DAYS=3  # drift-check.sh: DRIFT STALLED for a committed goal's open PR with no push, review or comment for this many days
+OPERATOR_NAME="<the operator name, as the first field of the state/pending.md rows>"  # the daily WAITING ON OPERATOR digest; empty = none
 DRIFT_AUDIT_PROFILE="<team profile for the daily drift audit worker (bin/drift-audit.sh)>"

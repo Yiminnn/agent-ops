@@ -5,6 +5,11 @@
 #   DRIFT CHECKPOINT <DEF> <objective>: checkpoint <date> passed, next proof "<proof>"; <merged PRs naming it>
 #   DRIFT UNATTENDED <DEF> <objective>: no live executor and no human next action in pending.md (follow-up not passed)
 #   DRIFT INCOMPLETE <DEF> <objective>: the Linear description lacks done-when, next proof or checkpoint ("-" in the cache)
+#   DRIFT STALLED <DEF> <owner/repo>#<n> <days>d   an open, non-draft PR of the goal not opened, pushed, reviewed or commented
+#                                           on for STALLED_DAYS (default 3). Its title, body or head branch names the DEF id (any
+#                                           case), or it is stacked on or under such a PR (head = base), never through main, master
+#                                           or DEPLOY_BRANCH. When gh fails (or cuts the list at 300), the line from check.sh's last
+#                                           snapshot (state/heartbeat.last) is kept with the UNKNOWN: a failed read is not activity
 #   DRIFT UNKNOWN: commitments cache stale (generated <UTC>)   its generated header is over 2 h old, or it has none
 #   DRIFT DISPATCH ops|uncommitted ...      a dispatch since the last check (state/drift-check.last) with no committed goal
 #   DRIFT PENDING overdue <date>|no follow-up: <line>
@@ -18,7 +23,7 @@ set -u
 T="${AGENT_OPS_HOME:-$HOME/.claude/agent-templates}"
 [ -f "$T/config" ] || { echo "DRIFT UNKNOWN: config ($T/config)"; exit 2; }
 . "$T/config"
-GH_REPOS="$GH_REPOS" exec python3 - "$T/state" <<'EOF'
+GH_REPOS="$GH_REPOS" STALLED_DAYS="${STALLED_DAYS:-3}" DEPLOY_BRANCH="${DEPLOY_BRANCH:-}" exec python3 - "$T/state" <<'EOF'
 import datetime as dt, json, os, re, subprocess, sys
 st = sys.argv[1]
 now = dt.datetime.fromisoformat(os.environ["AGENT_OPS_NOW"].replace("Z", "+00:00")) if os.environ.get("AGENT_OPS_NOW") else dt.datetime.now(dt.timezone.utc)
@@ -86,7 +91,51 @@ def merged_prs(g):
     found.sort(reverse=True)
     return f"{len(found)} merged PRs name it, latest {found[0][1]} at {found[0][0][:10]}" if found else "no merged PR names it"
 
+def open_prs():  # repo -> its open PRs, one gh call per repo; None when gh failed
+    prs = {}
+    for repo in os.environ["GH_REPOS"].split():
+        r = subprocess.run(["gh", "pr", "list", "-R", repo, "--state", "open", "-L", "300",
+                            "--json", "number,title,body,headRefName,baseRefName,isDraft"], capture_output=True, text=True)
+        try: prs[repo] = json.loads(r.stdout) if r.returncode == 0 else None
+        except ValueError: prs[repo] = None
+        if prs[repo] is None: unknown.append(f"gh pr list {repo} open")
+        elif len(prs[repo]) >= 300: unknown.append(f"gh pr list {repo} open (300 PRs: the list may be cut off)")
+    return prs
+
+try: earlier = [l for l in open(os.path.join(st, "heartbeat.last")).read().splitlines() if l.startswith("DRIFT STALLED ")]  # check.sh's snapshot
+except OSError: earlier = []
+
+def stalled(g, prs):  # the goal's open PRs: title, body or head branch names it, plus the PRs stacked on or under one of them
+    n, keep, days = g.removeprefix("DEF-"), {"main", "master", os.environ["DEPLOY_BRANCH"]}, int(os.environ["STALLED_DAYS"])
+    for repo, ps in prs.items():
+        blind, failed = ps is None or len(ps) >= 300, set()  # gh failed or cut off the repo's list; PRs whose activity gh failed to return
+        ps = ps or []
+        listed = {str(p["number"]) for p in ps}
+        name = re.compile(rf"(?i)(?<![a-z0-9])def[-_ ]?{n}(?![0-9])")  # DEF 700, DEF-700, def-700 in any case; _ is a separator, not a word letter
+        link = [p for p in ps if name.search(f"{p['title']} {p['body'] or ''} {p['headRefName']}")]
+        while True:  # a stack link is a branch that is one PR's head and another's base; never a long-lived branch
+            heads, bases = {p["headRefName"] for p in link} - keep, {p["baseRefName"] for p in link} - keep
+            more = [p for p in ps if p not in link and (p["baseRefName"] in heads or p["headRefName"] in bases)]
+            if not more: break
+            link += more
+        for p in sorted(link, key=lambda p: p["number"]):
+            if p["isDraft"]: continue
+            r = subprocess.run(["gh", "pr", "view", str(p["number"]), "-R", repo, "--json", "createdAt,commits,reviews,comments"], capture_output=True, text=True)
+            try: v = json.loads(r.stdout) if r.returncode == 0 else None
+            except ValueError: v = None
+            if v is None: unknown.append(f"gh pr view {repo}#{p['number']}"); failed.add(str(p["number"])); continue
+            ts = [x for x in [v.get("createdAt")] if x] + [c["committedDate"] for c in v.get("commits") or []] + [x["submittedAt"] for x in v.get("reviews") or [] if x.get("submittedAt")] + \
+                 [x["createdAt"] for x in v.get("comments") or []]
+            if not ts: continue
+            quiet = (now - max(dt.datetime.fromisoformat(t.replace("Z", "+00:00")) for t in ts)).days
+            if quiet >= days: out.append(f"DRIFT STALLED {g} {repo}#{p['number']} {quiet}d")
+        for l in earlier:  # a gh failure is not activity: keep the earlier line of a PR gh could not read, so check.sh sees no GONE
+            m = re.match(rf"DRIFT STALLED {g} {re.escape(repo)}#(\d+) ", l)
+            if m and (m[1] in failed or (blind and m[1] not in listed)): out.append(l)
+
+prs = open_prs() if goals else {}
 for g, c in goals.items():
+    stalled(g, prs)
     miss = [k for k, f in (("done-when", "done"), ("next proof", "proof"), ("checkpoint", "checkpoint")) if c[f] in ("", "-")]
     if miss: out.append(f"DRIFT INCOMPLETE {g} {c['objective']}: no {', '.join(miss)} in the Linear description (accountable: {c['human']})")
     try: cp = None if "checkpoint" in miss else dt.date.fromisoformat(c["checkpoint"])

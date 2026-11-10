@@ -152,4 +152,6 @@ bash "$(dirname "$0")/sandbox.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/default.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/drift.sh" || fail=$((fail+1))
 bash "$(dirname "$0")/commitments.sh" || fail=$((fail+1))
+bash "$(dirname "$0")/stalled.sh" || fail=$((fail+1))
+bash "$(dirname "$0")/digest.sh" || fail=$((fail+1))
 echo "pass=$pass fail=$fail"; rm -rf "$TMP"; [ "$fail" = 0 ]
