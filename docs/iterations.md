@@ -93,7 +93,7 @@ Failures behind them, all on 2026-11-10:
 |---|---|---|---|
 | 1 | `DRIFT STALLED <DEF> <repo>#<n> <days>d` | **Built** `drift-check.sh` | The PR is linked by name: its title, body or head branch names the DEF id, plus the PRs stacked on or under it (head = base), never through `main`, `master` or `DEPLOY_BRANCH`. **Not linked:** comments (reviews name follow-up ids), and the `#n` in an executor's `--expect` (it names no repo, and a worker reads PRs it does not own). **Clock:** last commit, review or comment, not `updatedAt`, so label and title edits do not count. A force-push that keeps old committer dates is missed |
 | 2 | `DRIFT GOALPOST <DEF> <field>: "<old>" -> "<new>"` | **Built** `commitments-render.py` | Compared as rendered against the cache that the render replaces, so the line prints once. `state/goalpost.log` keeps the trace. A row that left the cache and came back counts as new |
-| 3 | `WAITING ON OPERATOR <n>:` digest | **Built** `operator-digest.sh`, called on the `DRIFT SUMMARY` tick | Matched by the first field (`OPERATOR_NAME`, then a non-letter), so `Liz→Yimin` rows, owed to the operator, are not in it. Rows with no follow-up come first |
+| 3 | `WAITING ON OPERATOR <n>:` digest | **Built** `operator-digest.sh`, called on the `DRIFT SUMMARY` tick | Matched by the first field (`OPERATOR_NAME`, then a non-letter), so `<person>→<operator>` rows, owed to the operator, are not in it. Rows with no follow-up come first |
 
 No new guard, deny or hook.
 
